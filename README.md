@@ -2,6 +2,13 @@
 
 <img src="app/icon.jpg" alt="Peggle 2" width="30%">
 
+## peg2arm: Android
+
+This fork adds an **Android build for 64-bit ARM phones** with touch controls: drag to aim, tap to fire, two fingers
+to speed up, and a pause button. It is built from your own copy, like the other builds. See
+[docs/android.md](docs/android.md). An optional launcher (`launcher/`) shows the Peggle games installed on the phone
+as a row of covers you supply yourself.
+
 </div>
 <h1 align=center>Peggle 2 — Nintendo Switch port</h1>
 
@@ -16,12 +23,6 @@ carries it) directly on the Switch's own graphics API, deko3d. The PS4 edition's
 PS4 copy into the Xbox 360 game's data, and the parts of the PS4 game the Xbox 360 program never had (Windy's and
 Jimmy's powers) are written for the port.
 
-## peg2arm: Android
-
-This fork adds an **Android build for 64-bit ARM phones** with touch controls: drag to aim, tap to fire, two fingers
-to speed up, and a pause button. It is built from your own copy, like the other builds. See
-[docs/android.md](docs/android.md). An optional launcher (`launcher/`) shows the Peggle games installed on the phone
-as a row of covers you supply yourself.
 
 ## What's new in 1.0.1
 
