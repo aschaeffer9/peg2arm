@@ -24,6 +24,13 @@ option(REXGLUE_ENABLE_FIDELITYFX "Enable optional AMD FidelityFX integration (ex
 option(REXGLUE_ENABLE_TRACY                "Enable Tracy profiler integration" ON)
 option(REXGLUE_ENABLE_PERF_COUNTERS        "Enable lightweight perf counter registry and overlay" ON)
 option(REXGLUE_PLATFORM_SWITCH             "Build for Nintendo Switch (devkitA64 + libnx; set by the toolchain file)" OFF)
+# One binary, no runtime-loaded libraries: the Switch NRO, and Android's libmain.so (an app may only load native code
+# from its APK, not from its data folder where the SDK would look for a GPU plugin).
+if(REXGLUE_PLATFORM_SWITCH OR ANDROID)
+    set(REXGLUE_STATIC_RUNTIME ON)
+else()
+    set(REXGLUE_STATIC_RUNTIME OFF)
+endif()
 # Propagate profiling defines globally (compiled out in Release)
 if(REXGLUE_ENABLE_TRACY)
     add_compile_definitions($<$<NOT:$<CONFIG:Release>>:REXGLUE_ENABLE_PROFILING>)
@@ -176,6 +183,13 @@ elseif(WIN32)
         message(FATAL_ERROR "Unsupported Windows architecture: ${REX_TARGET_PROCESSOR}")
     endif()
     add_compile_definitions(REX_PLATFORM_WINDOWS=1)
+elseif(ANDROID)
+    # Android (NDK): Linux kernel and bionic. rex/platform.h turns on REX_PLATFORM_ANDROID and REX_PLATFORM_LINUX
+    # from __ANDROID__; everything is linked into one libmain.so (SDL's Java activity loads it).
+    if(NOT REX_TARGET_PROCESSOR MATCHES "aarch64|ARM64|arm64")
+        message(FATAL_ERROR "Android builds are arm64-v8a only (got ${REX_TARGET_PROCESSOR})")
+    endif()
+    set(REX_PLATFORM "android-arm64")
 elseif(UNIX AND NOT APPLE)
     if(REX_TARGET_PROCESSOR MATCHES "AMD64|x86_64")
         set(REX_PLATFORM "linux-amd64")
@@ -277,8 +291,8 @@ add_subdirectory(src/audio)
 add_subdirectory(src/graphics)
 add_subdirectory(src/system)
 add_subdirectory(src/kernel)
-if(NOT REXGLUE_PLATFORM_SWITCH)
-    # Host tools. Code generation runs on the PC; a Switch build compiles its
+if(NOT REXGLUE_PLATFORM_SWITCH AND NOT ANDROID)
+    # Host tools. Code generation runs on the PC; a Switch or Android build compiles its
     # output.
     add_subdirectory(src/codegen)
     add_subdirectory(src/rexglue)

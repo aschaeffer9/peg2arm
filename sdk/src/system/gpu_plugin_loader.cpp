@@ -54,7 +54,7 @@ std::vector<platform::DynamicLibrary>& LoadedPlugins() {
 
 }  // namespace
 
-#if REX_PLATFORM_SWITCH
+#if REX_PLATFORM_SWITCH || REX_PLATFORM_ANDROID
 }  // namespace rex::system
 
 // A NRO cannot load code at run time: rexgpu-xenos is linked into the
@@ -140,6 +140,6 @@ std::unique_ptr<IGraphicsSystem> LoadGpuPlugin(std::string_view name, std::strin
   return std::unique_ptr<IGraphicsSystem>(graphics_system);
 }
 
-#endif  // REX_PLATFORM_SWITCH
+#endif  // REX_PLATFORM_SWITCH || REX_PLATFORM_ANDROID
 
 }  // namespace rex::system

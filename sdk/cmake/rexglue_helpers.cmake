@@ -83,6 +83,40 @@ function(rexglue_configure_target target_name)
         return()
     endif()
 
+    if(ANDROID)
+        # One libmain.so that SDL's Java activity loads: the SDL entry point (main becomes SDL_main through
+        # SDL_main.h), the runtime and the GPU plugins linked in whole (gpu_plugin_loader.cpp calls the plugin's
+        # entry points directly; nothing is loaded at run time).
+        target_sources(${target_name} PRIVATE
+            ${REXGLUE_SHARE_DIR}/windowed_app_main_sdl.cpp
+            ${REXGLUE_SHARE_DIR}/rex_app.cpp)
+        target_compile_definitions(${target_name} PRIVATE REXGLUE_BUILD_CONFIG="$<CONFIG>")
+        if(TARGET imgui)
+            target_include_directories(${target_name} PRIVATE
+                $<TARGET_PROPERTY:imgui,INTERFACE_INCLUDE_DIRECTORIES>)
+        endif()
+        set(_whole "$<TARGET_FILE:rexruntime>")
+        set(_libs rexruntime)
+        foreach(_plugin IN LISTS ARG_GPU_PLUGINS)
+            if(NOT TARGET rexgpu-${_plugin})
+                message(FATAL_ERROR "rexglue_configure_target: unknown GPU plugin '${_plugin}'")
+            endif()
+            list(APPEND _whole "$<TARGET_FILE:rexgpu-${_plugin}>")
+            list(APPEND _libs rexgpu-${_plugin})
+        endforeach()
+        string(JOIN "," _whole_csv ${_whole})
+        target_link_options(${target_name} PRIVATE "LINKER:--whole-archive,${_whole_csv},--no-whole-archive")
+        set_property(TARGET ${target_name} APPEND PROPERTY LINK_DEPENDS ${_whole})
+        target_link_libraries(${target_name} PRIVATE ${_libs} android log)
+        # SDL's Java side looks the native entry points up by name (SDL_main, the JNI_OnLoad of SDL's
+        # android core): keep them exported from the shared library.
+        target_link_options(${target_name} PRIVATE "LINKER:--export-dynamic-symbol=SDL_main"
+                            "LINKER:--export-dynamic-symbol=JNI_OnLoad"
+                            "LINKER:--export-dynamic-symbol=Java_com_ari_peggle2_*" "LINKER:--no-undefined")
+        rexglue_apply_target_settings(${target_name})
+        return()
+    endif()
+
     target_sources(${target_name} PRIVATE
         ${REXGLUE_SHARE_DIR}/windowed_app_main_sdl.cpp
         ${REXGLUE_SHARE_DIR}/rex_app.cpp)

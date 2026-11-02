@@ -13,6 +13,14 @@ namespace renut::gpu::detail {
 
 // (Re)builds swapchain framebuffers and per-image present semaphores.
 bool BuildSwapChainTargets(VideoState &s);
+#if defined(__ANDROID__)
+// peggle2-android: a new swapchain on another window (the app came back from the background). Caller holds s.mutex;
+// nothing may be in flight on the old one (WaitAllSubmitted).
+bool RecreateSwapChain(VideoState &s, plume::RenderWindow window);
+// The window the swapchain presents to.
+void NoteSwapChainWindow(plume::RenderWindow window);
+plume::RenderWindow SwapChainWindow();
+#endif
 
 // Frees everything retired into 'slot' and rewinds its upload ring. Only once
 // the slot's fence has been waited.

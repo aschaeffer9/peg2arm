@@ -41,9 +41,26 @@ struct DrawPushConstants {
 
 // banjo-nx: sets 5-7 of the draw layout on Vulkan, one dynamic uniform buffer each (render/upload_ring.h): the
 // vertex shader's float constants, the pixel shader's, SharedConstants.
+// peggle2-android: Adreno allows 7 bound descriptor sets (maxBoundDescriptorSets), the layout above has 8. There the
+// texture table is one set (the shaders' Texture2D/3D/Cube/2DArray arrays all alias set 0 binding 0: the same table,
+// bound four times elsewhere), the samplers set 1 and the constants sets 2-4; PackDrawSets renumbers the shaders' sets.
+#if defined(__ANDROID__)
+#define RENUT_PACKED_DRAW_SETS 1
+constexpr uint32_t kDrawSamplerSet = 1;
+constexpr uint32_t kVertexConstantsSet = 2;
+constexpr uint32_t kPixelConstantsSet = 3;
+constexpr uint32_t kSharedConstantsSet = 4;
+#else
+#define RENUT_PACKED_DRAW_SETS 0
+constexpr uint32_t kDrawSamplerSet = 3;
 constexpr uint32_t kVertexConstantsSet = 5;
 constexpr uint32_t kPixelConstantsSet = 6;
 constexpr uint32_t kSharedConstantsSet = 7;
+#endif
+
+// peggle2-android: rewrites the DescriptorSet decorations of a draw-layout shader's SPIR-V to the packed numbering
+// (0,1,2,4 -> 0; 3 -> 1; 5,6,7 -> 2,3,4). Does nothing where RENUT_PACKED_DRAW_SETS is 0.
+void PackDrawSets(uint32_t *words, size_t word_count);
 
 bool BuildDrawLayout(VideoState &s);
 

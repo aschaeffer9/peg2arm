@@ -16,6 +16,13 @@ carries it) directly on the Switch's own graphics API, deko3d. The PS4 edition's
 PS4 copy into the Xbox 360 game's data, and the parts of the PS4 game the Xbox 360 program never had (Windy's and
 Jimmy's powers) are written for the port.
 
+## peg2arm: Android
+
+This fork adds an **Android build for 64-bit ARM phones** with touch controls: drag to aim, tap to fire, two fingers
+to speed up, and a pause button. It is built from your own copy, like the other builds. See
+[docs/android.md](docs/android.md). An optional launcher (`launcher/`) shows the Peggle games installed on the phone
+as a row of covers you supply yourself.
+
 ## What's new in 1.0.1
 
 - **A new renderer:** the game's Direct3D calls are drawn directly with deko3d (no emulated GPU command ring, no
@@ -212,6 +219,8 @@ whole process is in [docs/building.md](docs/building.md).
 
 - **PopCap Games** — creators of Peggle 2. This is an unofficial, fan-made port with no affiliation.
 - **ChanseyIsTheBest** — this port.
+- **[aschaeffer9](https://github.com/aschaeffer9)** — peg2arm, the Android build and its touch controls; the touch
+  layer follows **[peggle2-mac](https://github.com/macprotips/peggle2-mac)**'s game hooks (MIT).
 - **[Tom Clay](https://github.com/rexglue/rexglue-sdk)** — the ReXGlue SDK, built on the work of the
   **[Xenia](https://xenia.jp)** team.
 - **[StevensND](https://github.com/StevensND/nfsmw-nx)** — nfsmw-nx: the Switch layer of the SDK, the NVK build and

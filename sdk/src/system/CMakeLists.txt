@@ -48,8 +48,8 @@ set(REXSYSTEM_SOURCES
     xex_module.cpp
 )
 
-if(REXGLUE_PLATFORM_SWITCH)
-    # A NRO is a single static executable: no shared libraries, no dlopen.
+if(REXGLUE_STATIC_RUNTIME)
+    # A NRO (and Android's libmain.so) is a single binary: no shared libraries, no dlopen.
     # rexglue_switch_configure_target links it whole into the title.
     add_library(rexruntime STATIC ${REXSYSTEM_SOURCES})
 else()

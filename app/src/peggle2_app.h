@@ -28,6 +28,9 @@
 #include "peggle2_capture.h"
 #include "peggle2_enhancements.h"
 #include "peggle2_input_script.h"
+#if PEGGLE2_TOUCH
+#include "peggle2_touch.h"
+#endif
 #include "peggle2_pc_profiler.h"
 #include "peggle2_pgo.h"
 #include "peggle2_texdiag.h"
@@ -174,6 +177,9 @@ class Peggle2App : public rex::ReXApp {
   void OnPreSetup(rex::RuntimeConfig& config) override {
     // Test runs: a scripted controller (peggle2_input_script), added only when the script is set.
     config.input_factory = peggle2::input_script::Wrap(std::move(config.input_factory));
+#if PEGGLE2_TOUCH
+    config.input_factory = peggle2::touch::Wrap(std::move(config.input_factory));  // Android: touch controls
+#endif
     peggle2::enhancements::ApplyGpuBoost();  // peggle2_gpu_boost (the Switch in handheld mode only)
 #if PEGGLE2_RENUT_RENDERER
     // peggle2_renderer = "renut" (2026-10-19): Renut's Direct3D-level renderer (reNut by masterspike52, as banjo-nx

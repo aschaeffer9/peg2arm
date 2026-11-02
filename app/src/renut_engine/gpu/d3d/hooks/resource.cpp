@@ -25,6 +25,7 @@
 #include <mutex>
 #include <unordered_set>
 
+#include <rex/atomic_ref.h>
 #include <rex/hook.h>
 
 #include "renut_engine/gpu/banjo_renut_select.h"
@@ -147,7 +148,7 @@ u32 AtomicAddGuest(u32 va, u32 delta) {
   auto *p = GuestPtr<u32>(va);
   if (!p)
     return 0;
-  std::atomic_ref<u32> word(*p);
+  rex::atomic_ref<u32> word(*p);  // std::atomic_ref where the library has it
   u32 raw = word.load(std::memory_order_relaxed);
   for (;;) {
     const u32 old = __builtin_bswap32(raw);

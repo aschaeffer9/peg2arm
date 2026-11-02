@@ -82,6 +82,10 @@ elseif(REXGLUE_PLATFORM_SWITCH)
         switch_libc_supplement.c      # pread, pwrite and friends: newlib declares them, libnx does not
     )
 elseif(UNIX)
+    if(ANDROID)
+        # fiber_switch.cpp: the AAPCS64 context switch (bionic has no makecontext/swapcontext).
+        target_sources(rexcore PRIVATE android_platform.cpp fiber_switch.cpp)
+    endif()
     # Linux and macOS/Darwin share the POSIX sources; Darwin-specific behavior
     # is selected inside them with #if defined(__APPLE__).
     target_sources(rexcore PRIVATE
@@ -128,6 +132,9 @@ target_include_directories(rexcore PRIVATE
 
 if(APPLE)
     target_link_libraries(rexcore PRIVATE pthread)
+elseif(ANDROID)
+    # bionic has pthreads and clocks in libc; liblog for logcat, libandroid for ASharedMemory and the NDK APIs.
+    target_link_libraries(rexcore PUBLIC dl log android)
 elseif(UNIX)
     target_link_libraries(rexcore PRIVATE pthread rt dl)
 endif()

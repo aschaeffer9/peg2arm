@@ -4,6 +4,7 @@
 #include "renut_engine/gpu/backend/backend.h"
 
 #include <algorithm>
+#include <cstring>
 #include <atomic>
 #include <cstdlib>
 #include <filesystem>
@@ -23,6 +24,7 @@
 #endif
 
 #include "renut_engine/gpu/log.h"
+#include "renut_engine/gpu/render/pipeline.h"  // peggle2-android: PackDrawSets
 #include "renut_engine/gpu/banjo_renut_record.h"  // banjo-nx (package 28b)
 
 // peggle2-nx (2026-10-20): deko3d by default on the Switch (the renderer of peggle2_renderer = "renut" there; "d3d12"
@@ -501,6 +503,17 @@ std::unique_ptr<plume::RenderShader> CreateHostShader(plume::RenderDevice *devic
     RGPU_ERROR("Host shader '{}' has no {} blob", name, BackendName(ActiveBackend()));
     return nullptr;
   }
+#if RENUT_PACKED_DRAW_SETS
+  // peggle2-android: the geometry shaders of the draw layout read SharedConstants: its set renumbered (PackDrawSets).
+  std::vector<uint32_t> packed;
+  if (vulkan && (std::strcmp(name, "rectangle_list_gs") == 0 || std::strcmp(name, "point_sprite_gs") == 0) &&
+      size % 4 == 0) {
+    packed.resize(size / 4);
+    std::memcpy(packed.data(), data, size);
+    PackDrawSets(packed.data(), packed.size());
+    data = packed.data();
+  }
+#endif
   auto shader = device->createShader(data, size, "main", HostShaderFormat());
   if (!shader)
     RGPU_ERROR("createShader failed for host shader '{}'", name);

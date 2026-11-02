@@ -4707,10 +4707,14 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
   if (!g_bound.layout) {
     cmd->setGraphicsPipelineLayout(s.draw_layout.get());
     cmd->setGraphicsDescriptorSet(s.texture_set.get(), 0);
+#if RENUT_PACKED_DRAW_SETS  // peggle2-android
+    cmd->setGraphicsDescriptorSet(s.sampler_set.get(), kDrawSamplerSet);
+#else
     cmd->setGraphicsDescriptorSet(s.texture_set.get(), 1);
     cmd->setGraphicsDescriptorSet(s.texture_set.get(), 2);
     cmd->setGraphicsDescriptorSet(s.sampler_set.get(), 3);
     cmd->setGraphicsDescriptorSet(s.texture_set.get(), 4);
+#endif
     g_bound.layout = true;
     g_bound.pipeline = nullptr;
     std::fill(std::begin(g_bound.root_set), std::end(g_bound.root_set), false);

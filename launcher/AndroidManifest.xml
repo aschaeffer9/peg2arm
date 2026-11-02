@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- peg2arm's optional launcher: a carousel of the Peggle games installed on the device (java/.../LauncherActivity). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.ari.peggle.launcher"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <!-- Android 11+ shows an app only the packages it names here. -->
+    <queries>
+        <package android:name="com.ari.peggle2" />
+        <package android:name="com.aidrum.peggle.hd" />
+        <package android:name="com.aidrum.peggle" />
+        <package android:name="com.ea.game.pegglex_row" />
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:allowBackup="false"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <activity
+            android:name=".LauncherActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|screenLayout|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

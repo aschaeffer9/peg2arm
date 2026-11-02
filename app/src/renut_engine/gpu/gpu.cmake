@@ -328,7 +328,7 @@ function(renut_gpu_setup TARGET)
         "${RENUT_IMGUI_DIR}/imgui_widgets.cpp")
     # banjo-nx: not on the Switch, where everything links statically: a second copy there is a second definition of
     # every ImGui symbol. The console uses the SDK's copy, and Renut's overlay is not started there (app_integration).
-    if(NOT REXGLUE_PLATFORM_SWITCH)
+    if(NOT REXGLUE_PLATFORM_SWITCH AND NOT ANDROID)
         target_sources(${TARGET} PRIVATE ${renut_imgui_sources})
         set_source_files_properties(${renut_imgui_sources} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
     endif()
@@ -338,8 +338,8 @@ function(renut_gpu_setup TARGET)
 
     if(WIN32)
         target_link_libraries(${TARGET} PRIVATE d3d12 dxgi)
-    elseif(NOT APPLE AND NOT REXGLUE_PLATFORM_SWITCH)
-        # plume's Linux Vulkan surface is Xlib; volk loads libvulkan itself.
+    elseif(NOT APPLE AND NOT REXGLUE_PLATFORM_SWITCH AND NOT ANDROID)
+        # plume's Linux Vulkan surface is Xlib; volk loads libvulkan itself (Android: VK_KHR_android_surface).
         find_package(X11 REQUIRED)
         target_link_libraries(${TARGET} PRIVATE X11::X11)
     endif()

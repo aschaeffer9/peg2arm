@@ -89,7 +89,12 @@ VideoState &StateSlow() {
 
 namespace {
 
+#if defined(__ANDROID__)
+// peggle2-android: Android's surfaces offer RGBA8 (Adreno: no BGRA8 surface format).
+constexpr plume::RenderFormat kSwapChainFormat = plume::RenderFormat::R8G8B8A8_UNORM;
+#else
 constexpr plume::RenderFormat kSwapChainFormat = plume::RenderFormat::B8G8R8A8_UNORM;
+#endif
 
 bool BuildUtilityLayout(VideoState &s) {
   plume::RenderDescriptorSetBuilder textures;
@@ -412,6 +417,34 @@ std::unique_ptr<plume::RenderDescriptorSet> CreateTargetReadbackSet(VideoState &
 } // namespace detail
 
 namespace detail {
+
+#if defined(__ANDROID__)
+namespace {
+plume::RenderWindow g_swap_window{};
+}
+
+void NoteSwapChainWindow(plume::RenderWindow window) { g_swap_window = window; }
+plume::RenderWindow SwapChainWindow() { return g_swap_window; }
+
+bool RecreateSwapChain(VideoState &s, plume::RenderWindow window) {
+  s.swap_framebuffers.clear();
+  s.swap_chain.reset();  // its VkSurface (on the old window) with it
+  plume::RenderSwapChainDesc swap_desc(window, kSwapChainFormat, kFramesInFlight + 1, false, kFramesInFlight);
+  s.swap_chain = s.queue->createSwapChain(swap_desc);
+  if (s.swap_chain)
+    s.swap_chain->resize();
+  if (!s.swap_chain || s.swap_chain->isEmpty() || !BuildSwapChainTargets(s)) {
+    RGPU_ERROR("Swapchain on the new Android window failed (tries again at the next frame)");
+    s.swap_framebuffers.clear();
+    s.swap_chain.reset();
+    return false;
+  }
+  g_swap_window = window;
+  RGPU_INFO("Swapchain recreated on the new Android window ({}x{})", s.swap_chain->getWidth(),
+            s.swap_chain->getHeight());
+  return true;
+}
+#endif
 
 bool BuildSwapChainTargets(VideoState &s) {
   s.swap_framebuffers.clear();
@@ -884,6 +917,16 @@ bool Video::CreateHostDevice() {
       }
     }
   }
+#elif defined(__ANDROID__)
+  // Android discards stderr; plume's failures go to logs/plume_stderr.log in the app's folder (the working directory).
+  {
+    std::error_code ec;
+    std::filesystem::create_directories("logs", ec);
+    if (std::freopen("logs/plume_stderr.log", "w", stderr)) {
+      setvbuf(stderr, nullptr, _IONBF, 0);
+      RGPU_INFO("plume's error messages go to logs/plume_stderr.log");
+    }
+  }
 #endif
 
   banjo::renut_gpu::BeforeDeviceCreated();  // banjo-nx: plume's pipeline cache and barriers (banjo_renut_tuning.h)
@@ -923,6 +966,9 @@ bool Video::CreateHostDevice() {
       s.timestamps[i] = s.device->createQueryPool(2 * VideoState::kTimedLists);
   }
 
+#if defined(__ANDROID__)
+  detail::NoteSwapChainWindow(render_window);
+#endif
   // One image beyond the frames in flight, so acquiring never waits on scanout.
   plume::RenderSwapChainDesc swap_desc(render_window, kSwapChainFormat, kFramesInFlight + 1, false,
                                        kFramesInFlight);

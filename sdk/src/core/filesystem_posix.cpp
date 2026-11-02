@@ -26,6 +26,9 @@
 
 #include <rex/assert.h>
 #include <rex/filesystem.h>
+#if defined(__ANDROID__)
+#include <rex/main_android.h>
+#endif
 #include <rex/logging.h>
 #include <rex/platform/env.h>
 #include <rex/string.h>
@@ -77,7 +80,12 @@ extern "C" char** __system_argv;
 #endif
 
 std::filesystem::path GetExecutablePath() {
-#if defined(__APPLE__)
+#if defined(__ANDROID__)
+  // /proc/self/exe is the zygote's app_process64: the "executable" is a name in the app's files folder, so its
+  // folder is that folder (rex/main_android.h).
+  const auto& folder = GetAndroidAppFolder();
+  return folder.empty() ? std::filesystem::path() : folder / "peggle2";
+#elif defined(__APPLE__)
   // Darwin has no /proc; query the executable path via the dyld API. The first
   // call reports the required buffer size.
   uint32_t executable_path_size = 0;
@@ -148,7 +156,10 @@ std::filesystem::path GetExecutableFolder() {
 }
 
 std::filesystem::path GetUserFolder() {
-#if defined(__SWITCH__)
+#if defined(__ANDROID__)
+  // No HOME or passwd entry for an app: its data stays in its files folder, as next to the PC executable.
+  return GetAndroidAppFolder();
+#elif defined(__SWITCH__)
   // Horizon has no XDG_DATA_HOME, no HOME and no user database. The branch below
   // would end up in pw->pw_dir with pw NULL and kill the process at startup:
   // rex_app.cpp calls it to decide the data folder. On Switch the data goes next
