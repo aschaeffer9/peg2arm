@@ -1,5 +1,5 @@
 # peg2arm: builds the optional launcher (launcher/, original code, no art) and attaches it to a GitHub release.
-# Runs for tags named peg2arm-v* (and by hand). The Peggle 2 app itself is never built here: it is made from each
+# Runs when a release is published or a peg2arm-v* tag is pushed (and by hand). The Peggle 2 app itself is never built here: it is made from each
 # user's own copy of the game (install/peg2arm-setup.bat).
 #
 # Signing: with the repository secrets LAUNCHER_KEYSTORE_BASE64 (a .jks/.keystore, base64) and
@@ -10,6 +10,8 @@ name: launcher release
 on:
   push:
     tags: ['peg2arm-v*']
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
