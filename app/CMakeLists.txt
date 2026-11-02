@@ -155,6 +155,10 @@ endif()
 
 if(WIN32)
     add_executable(peggle2 WIN32 ${PEGGLE2_SOURCES})
+elseif(ANDROID)
+    # Android: libmain.so, loaded by SDL's Java activity (android/ in this repository), which calls SDL_main.
+    add_library(peggle2 SHARED ${PEGGLE2_SOURCES})
+    set_target_properties(peggle2 PROPERTIES OUTPUT_NAME main)
 else()
     add_executable(peggle2 ${PEGGLE2_SOURCES})
 endif()
@@ -228,11 +232,14 @@ if(PEGGLE2_NATIVE_RENDERER)
         "${REXSDK_DIR}/src/ui/shaders")
 
     # CPU-only SDK sources the native renderer reuses (draw-extent estimation, shader microcode interpretation): the
-    # GPU plugin's private symbols cannot satisfy application-side use.
-    target_sources(peggle2 PRIVATE
-        "${REXSDK_DIR}/src/graphics/register_file.cpp"
-        "${REXSDK_DIR}/src/graphics/format/ucode.cpp"
-        "${REXSDK_DIR}/src/graphics/pipeline/shader/interpreter.cpp")
+    # GPU plugin's private symbols cannot satisfy application-side use. (Android links the plugin whole into
+    # libmain.so, so there they are the plugin's: a second copy would define them twice.)
+    if(NOT ANDROID)
+        target_sources(peggle2 PRIVATE
+            "${REXSDK_DIR}/src/graphics/register_file.cpp"
+            "${REXSDK_DIR}/src/graphics/format/ucode.cpp"
+            "${REXSDK_DIR}/src/graphics/pipeline/shader/interpreter.cpp")
+    endif()
 
     # The renderer includes xxhash.h and renderdoc_app.h directly; when the SDK is built from source they are private
     # to its libraries.
@@ -244,7 +251,8 @@ if(PEGGLE2_NATIVE_RENDERER)
 endif()
 
 # Settings template next to the executable, only when there is none yet (the copy there is the user's to edit).
-if(NOT REXGLUE_PLATFORM_SWITCH)
+# (Android: the app's folder is on the phone; the packaging script pushes the settings there.)
+if(NOT REXGLUE_PLATFORM_SWITCH AND NOT ANDROID)
     add_custom_command(TARGET peggle2 POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -DSRC=${CMAKE_CURRENT_SOURCE_DIR}/peggle2.toml -DDST=$<TARGET_FILE_DIR:peggle2>/peggle2.toml
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/copy_if_missing.cmake"
@@ -357,7 +365,7 @@ if(PEGGLE2_GEN_DEAD_DEFS_POISON)
 endif()
 # The PC build (a test build: nothing ships for the PC) checks the proofs of the two late steps at run time, as it
 # checks every read-only constant (RexRoCheck): src/cpu/peggle2_codegen_checks.cpp counts them for the [verify] line.
-if(NOT REXGLUE_PLATFORM_SWITCH)
+if(NOT REXGLUE_PLATFORM_SWITCH AND NOT ANDROID)
     list(APPEND _peggle2_round_definitions REX_R1_CHECK REX_LR_WRITE_SAME_CHECK)
 endif()
 # The game code and the app (whose localized copies are the same generated statements).
@@ -381,8 +389,8 @@ message(STATUS "peggle2: banjo-nx's codegen round: vperm1 ${PEGGLE2_GEN_VPERM1},
 
 # PC diagnostic (sa2-nx, 2026-10-12): the game code and the app count the executions of the any-mode float helpers
 # (rex/ppc/diet_ops.h, REX_DIET_CENSUS_ON) in counters the app defines (src/cpu/peggle2_codegen_checks.cpp), for the
-# '[census]' lines of peggle2_diag_runtime_census. Never the Switch build.
-if(NOT REXGLUE_PLATFORM_SWITCH)
+# '[census]' lines of peggle2_diag_runtime_census. Never the Switch build (nor Android).
+if(NOT REXGLUE_PLATFORM_SWITCH AND NOT ANDROID)
     foreach(target peggle2 peggle2_recomp)
         if(TARGET ${target})
             target_compile_definitions(${target} PRIVATE REX_DIET_CENSUS_ON)
@@ -390,9 +398,27 @@ if(NOT REXGLUE_PLATFORM_SWITCH)
     endforeach()
 endif()
 
+# Android: fixed settings compiled in, as on the Switch (src/peggle2_app.h BuiltInConfig / DefaultConfigFile), from
+# app/peggle2_android_defaults.toml and app/peggle2_android.toml.
+if(ANDROID)
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/peggle2_android_defaults.toml" PEGGLE2_BUILTIN_CONFIG)
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/peggle2_android.toml" PEGGLE2_PLAYER_CONFIG)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                 "${CMAKE_CURRENT_SOURCE_DIR}/peggle2_android_defaults.toml"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/peggle2_android.toml")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/peggle2_builtin_config.h.in"
+                   "${CMAKE_CURRENT_BINARY_DIR}/builtin_config/peggle2_builtin_config.h" @ONLY)
+    target_include_directories(peggle2 PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/builtin_config")
+    target_compile_definitions(peggle2 PRIVATE PEGGLE2_BUILTIN_CONFIG=1)
+    # Touch controls: drag to aim, tap to fire (src/peggle2_touch.h).
+    target_sources(peggle2 PRIVATE src/peggle2_touch.cpp)
+    target_compile_definitions(peggle2 PRIVATE PEGGLE2_TOUCH=1)
+endif()
+
 # peggle2_register.cpp is one generated function of ~27,000 SetFunction calls that runs once at startup. In sasrt-nx
 # and sa2-nx GCC -O3 spent 771-927 s on theirs alone (the critical path of every Switch build); -O0 compiles it in
-# seconds and changes nothing at run time but a few microseconds of startup.
+# seconds and changes nothing at run time but a few microseconds of startup. (Not Android: clang refuses a PCH built
+# with another -O level, and compiles the file at -O2 in seconds anyway, as on the PC.)
 if(REXGLUE_PLATFORM_SWITCH)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated/default/peggle2_register.cpp")
         set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/generated/default/peggle2_register.cpp"

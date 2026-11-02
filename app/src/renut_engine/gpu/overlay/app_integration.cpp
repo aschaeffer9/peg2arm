@@ -98,13 +98,13 @@ bool StartRenderer(rex::ui::WindowedAppContext &app_context,
     return false;
   }
   // reNut's own overlay (overlay_ui.h), built on the UI thread with the SDK's.
-#if !defined(__SWITCH__)
+#if !defined(__SWITCH__) && !defined(__ANDROID__)
   if (!overlay::Start([&app_context](std::function<void()> build) {
         app_context.CallInUIThreadDeferred(std::move(build));
       }))
     RGPU_WARN("Overlay input unavailable: no game window");
 #else
-  // banjo-nx: not on the Switch. Its Dear ImGui there is the SDK's one copy (gpu.cmake), whose current context the
+  // banjo-nx: not on the Switch (nor on Android, which links statically the same way). Its Dear ImGui there is the SDK's one copy (gpu.cmake), whose current context the
   // SDK switches from any thread: the reason Renut builds its own copy elsewhere.
 #endif
 

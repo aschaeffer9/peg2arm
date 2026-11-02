@@ -29,7 +29,7 @@
 
 #include <rex/platform.h>
 
-#if REX_PLATFORM_SWITCH
+#if REX_PLATFORM_SWITCH || REX_PLATFORM_ANDROID
 
 #include <rex/thread/fiber.h>
 
@@ -174,4 +174,4 @@ extern "C" [[noreturn]] void rex_fiber_trampoline(void) {
   std::abort();
 }
 
-#endif  // REX_PLATFORM_SWITCH
+#endif  // REX_PLATFORM_SWITCH || REX_PLATFORM_ANDROID

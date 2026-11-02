@@ -1,0 +1,35 @@
+# peggle2-android: the Android build's fixed settings, compiled into libmain.so (src/peggle2_app.h BuiltInConfig).
+# peggle2.toml in the app's folder (Android/data/<package>/files) is applied after this and may set any key again.
+
+# The full game (XBLA titles ask the console for their licence).
+license_mask = 1
+
+# Renut's Direct3D-level renderer on Vulkan (Adreno): no PM4 ring, no EDRAM model. The Xenos emulation stays linked
+# (the runtime creates its graphics system), but Renut's hooks draw.
+gpu_plugin = "xenos"
+peggle2_renderer = "renut"
+renut_gpu_backend = "vulkan"
+masseffect_renderer_native = false
+
+# The Xbox 360 game's 30 pictures a second to start with (60 logic steps a second either way).
+peggle2_fps = 30
+
+# Development: log to logs/ in the app's folder (read over adb).
+log_level = "info"
+log_to_file = true
+
+# The 1080p art (peggle2_hd.pack in the app's folder) and the PS4 content (game_root.nxpack holds it).
+peggle2_hd_atlases = 2
+xam_guest_signin = true
+peggle2_dlc_mp_masters = true
+peggle2_dlc_master_select = true
+peggle2_dlc_overlays = true
+peggle2_dlc_motion = true
+
+# No network: the game's network manager (RakNet) must get sockets at boot or it frees itself and the main thread later
+# waits on a lock in freed memory (docs/peggle2-notes.md, "The console boot crash"). Offline sockets: every call
+# succeeds, nothing arrives from outside.
+net_offline_sockets = true
+
+# Each touch gesture and what it did, in logs/ (development).
+peggle2_touch_log = false

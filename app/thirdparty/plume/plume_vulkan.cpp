@@ -1588,6 +1588,15 @@ namespace plume {
         layoutInfo.pSetLayouts = !setLayoutHandles.empty() ? setLayoutHandles.data() : nullptr;
         layoutInfo.setLayoutCount = uint32_t(setLayoutHandles.size());
 
+        // peggle2-android: a set layout that failed to create is VK_NULL_HANDLE; handing it to the driver crashes some
+        // (Adreno) instead of returning an error.
+        for (uint32_t i = 0; i < uint32_t(setLayoutHandles.size()); i++) {
+            if (setLayoutHandles[i] == VK_NULL_HANDLE) {
+                fprintf(stderr, "vkCreatePipelineLayout skipped: descriptor set layout %u was not created.\n", i);
+                return;
+            }
+        }
+
         VkResult res = vkCreatePipelineLayout(device->vk, &layoutInfo, nullptr, &vk);
         if (res != VK_SUCCESS) {
             fprintf(stderr, "vkCreatePipelineLayout failed with error code 0x%X.\n", res);
@@ -4635,6 +4644,37 @@ namespace plume {
         deviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         deviceFeatures.pNext = featuresChain;
         vkGetPhysicalDeviceFeatures2(physicalDevice, &deviceFeatures);
+
+#if defined(__ANDROID__)
+        // peggle2-android: what the bindless texture tables (renut's 4 x 8192 sampled images, 256 samplers, update after
+        // bind) depend on, on this GPU (stderr goes to logs/plume_stderr.log).
+        {
+            VkPhysicalDeviceDescriptorIndexingProperties indexingProps = {};
+            indexingProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES;
+            VkPhysicalDeviceProperties2 props2 = {};
+            props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            props2.pNext = &indexingProps;
+            vkGetPhysicalDeviceProperties2(physicalDevice, &props2);
+            const VkPhysicalDeviceLimits &l = props2.properties.limits;
+            fprintf(stderr, "[android] %s, API %u.%u.%u, driver 0x%X\n", props2.properties.deviceName,
+                VK_API_VERSION_MAJOR(props2.properties.apiVersion), VK_API_VERSION_MINOR(props2.properties.apiVersion),
+                VK_API_VERSION_PATCH(props2.properties.apiVersion), props2.properties.driverVersion);
+            fprintf(stderr, "[android] VK_EXT_descriptor_indexing listed %d; features: partiallyBound %u variableCount %u "
+                "runtimeArray %u sampledImageUpdateAfterBind %u nonUniformSampledImage %u\n", int(descriptorIndexingFound),
+                indexingFeatures.descriptorBindingPartiallyBound, indexingFeatures.descriptorBindingVariableDescriptorCount,
+                indexingFeatures.runtimeDescriptorArray, indexingFeatures.descriptorBindingSampledImageUpdateAfterBind,
+                indexingFeatures.shaderSampledImageArrayNonUniformIndexing);
+            fprintf(stderr, "[android] limits: perStage sampledImages %u samplers %u resources %u boundSets %u; set sampledImages %u "
+                "samplers %u; updateAfterBind perStage sampledImages %u samplers %u resources %u, set sampledImages %u samplers %u, "
+                "maxUpdateAfterBindDescriptorsInAllPools %u; pushConstants %u\n",
+                l.maxPerStageDescriptorSampledImages, l.maxPerStageDescriptorSamplers, l.maxPerStageResources, l.maxBoundDescriptorSets,
+                l.maxDescriptorSetSampledImages, l.maxDescriptorSetSamplers,
+                indexingProps.maxPerStageDescriptorUpdateAfterBindSampledImages, indexingProps.maxPerStageDescriptorUpdateAfterBindSamplers,
+                indexingProps.maxPerStageUpdateAfterBindResources, indexingProps.maxDescriptorSetUpdateAfterBindSampledImages,
+                indexingProps.maxDescriptorSetUpdateAfterBindSamplers, indexingProps.maxUpdateAfterBindDescriptorsInAllPools,
+                l.maxPushConstantsSize);
+        }
+#endif
 
         // Check for properties.
         if (rayTracingFound) {

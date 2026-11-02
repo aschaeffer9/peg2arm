@@ -53,7 +53,8 @@
 // An offline socket gives the game what a console with a network cable and no traffic gives it: every call
 // succeeds, nothing ever arrives from outside, a blocking recvfrom blocks. A datagram sent to a port another
 // offline socket of this process is bound to is delivered to it (RakNet wakes its own receive thread that way).
-#if defined(__SWITCH__)
+// peggle2-android: Android too (the app has no INTERNET permission, so socket() fails with EPERM: the same failure).
+#if defined(__SWITCH__) || defined(__ANDROID__)
 #define REX_NET_OFFLINE_SOCKETS_DEFAULT true
 #else
 #define REX_NET_OFFLINE_SOCKETS_DEFAULT false

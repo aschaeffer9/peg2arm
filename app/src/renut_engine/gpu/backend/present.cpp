@@ -26,6 +26,7 @@
 #include "renut_engine/gpu/banjo_renut_tuning.h"
 #include "renut_engine/gpu/backend/render_thread.h"
 #include "renut_engine/gpu/backend/video.h"
+#include "renut_engine/gpu/backend/native_window.h"  // peggle2-android: CurrentAndroidWindow
 #include "renut_engine/gpu/backend/video_internal.h"
 #include "renut_engine/gpu/banjo_renut_capture.h"
 #if defined(PLUME_DEKO3D)
@@ -83,8 +84,14 @@ void RebuildSwapChain(VideoState &s) {
   }
 }
 
-// The most of the game's frame trimmed off either axis to fill the output.
+// The most of the game's frame trimmed off either axis to fill the output. Android: none: a phone is far wider than
+// 16:9, and a trim would cut the score and the ball counter off the top and bottom; the frame is shown whole, with
+// bars at the sides (and touch coordinates map through the same fit: src/peggle2_touch.cpp).
+#if defined(__ANDROID__)
+constexpr float kMaxTrim = 0.0f;
+#else
 constexpr float kMaxTrim = 0.15f;
+#endif
 
 struct FrameFit {
   plume::RenderViewport viewport;
@@ -178,7 +185,11 @@ struct FrameCapture {
 FrameCapture g_capture;
 
 // The present pipeline's format (kSwapChainFormat in video.cpp).
+#if defined(__ANDROID__)
+constexpr plume::RenderFormat kCaptureFormat = plume::RenderFormat::R8G8B8A8_UNORM;
+#else
 constexpr plume::RenderFormat kCaptureFormat = plume::RenderFormat::B8G8R8A8_UNORM;
+#endif
 
 bool CaptureFrameLocked(VideoState &s, const PresentImage &image, rex::ui::RawImage &out) {
   const uint32_t w = image.source_width ? image.source_width : image.width;
@@ -326,6 +337,24 @@ void PresentLocked(VideoState &s, const PresentImage *image) {
   PresentImage diag_image;
   if (image && DiagTextureImageLocked(diag_image))
     image = &diag_image;
+#if defined(__ANDROID__)
+  // peggle2-android: leaving the app destroys its surface, and coming back gives a new one: no presents while there
+  // is none, and a new swapchain on the new one (the old VkSurface is dead).
+  {
+    const plume::RenderWindow window = CurrentAndroidWindow();
+    if (window && (window != detail::SwapChainWindow() || !s.swap_chain)) {
+      if (s.list_open)
+        detail::SubmitAndAdvance(s, nullptr, nullptr);
+      detail::WaitAllSubmitted(s);
+      detail::RecreateSwapChain(s, window);
+    }
+    if (!window || !s.swap_chain) {
+      if (s.list_open)
+        detail::SubmitAndAdvance(s, nullptr, nullptr);
+      return;
+    }
+  }
+#endif
   ApplyVsync(s);
   if (s.swap_chain->needsResize() || s.resize_requested.exchange(false, std::memory_order_acq_rel))
     RebuildSwapChain(s);

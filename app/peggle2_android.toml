@@ -1,0 +1,9 @@
+# Peggle 2 for Android: your settings. The game writes this file when there is none; delete it to get the defaults
+# back. Everything else is built into the app.
+
+# Pictures a second: 60 = a picture every screen refresh, 30 = as the Xbox 360 game. The game runs at the same speed
+# either way (60 logic steps a second).
+peggle2_fps = 30
+
+# Language: "en", "de", "fr", "es", "it" or "pt" (Brazilian Portuguese). Empty = English.
+peggle2_language = ""

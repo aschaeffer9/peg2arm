@@ -19,6 +19,7 @@
 
 #include "renut_engine/gpu/backend/backend.h"
 #include "renut_engine/gpu/d3d/d3d.h"
+#include "renut_engine/gpu/render/pipeline.h"  // peggle2-android: PackDrawSets
 #include "renut_engine/gpu/log.h"
 #include "renut_engine/gpu/banjo_renut_tuning.h"
 #if defined(PLUME_DEKO3D)
@@ -146,6 +147,7 @@ std::unique_ptr<plume::RenderShader> CreateCachedShader(plume::RenderDevice *dev
       RGPU_ERROR("SPIR-V decode failed for shader {:016X}", entry.hash);
       return nullptr;
     }
+    PackDrawSets(reinterpret_cast<uint32_t *>(spirv.data()), spirv.size() / 4);  // peggle2-android
     return device->createShader(spirv.data(), spirv.size(), "main",
                                 plume::RenderShaderFormat::SPIRV);
   }

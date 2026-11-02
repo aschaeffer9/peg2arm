@@ -13,7 +13,16 @@
 #include <condition_variable>
 #include <forward_list>
 #include <mutex>
+#if defined(__ANDROID__)
+// The NDK's libc++ (LLVM 19) keeps std::jthread and std::stop_token behind -fexperimental-library: Android uses a
+// plain std::thread with a stop flag, with the same waits (the flag is part of the condition's predicate).
+#include <atomic>
+#include <thread>
+#define REX_TIMER_QUEUE_JTHREAD 0
+#else
 #include <stop_token>
+#define REX_TIMER_QUEUE_JTHREAD 1
+#endif
 
 #include <rex/assert.h>
 #include <rex/thread.h>
@@ -37,6 +46,9 @@ class TimerQueue {
   static_assert(clock::is_steady);
 
  public:
+#if REX_TIMER_QUEUE_JTHREAD
+  using StopToken = std::stop_token;
+
   TimerQueue() {
     dispatch_thread_ =
         std::jthread([this](std::stop_token stop_token) { TimerThreadMain(stop_token); });
@@ -47,8 +59,29 @@ class TimerQueue {
     // destruction, before the members it uses are destroyed.
     dispatch_thread_.request_stop();
   }
+#else
+  struct StopToken {
+    const std::atomic<bool>* flag;
+    bool stop_requested() const { return flag->load(std::memory_order_acquire); }
+  };
 
-  void TimerThreadMain(std::stop_token stop_token) {
+  TimerQueue() {
+    dispatch_thread_ = std::thread([this] { TimerThreadMain(StopToken{&stop_}); });
+  }
+
+  ~TimerQueue() {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      stop_.store(true, std::memory_order_release);
+    }
+    cv_.notify_all();
+    if (dispatch_thread_.joinable()) {
+      dispatch_thread_.join();
+    }
+  }
+#endif
+
+  void TimerThreadMain(StopToken stop_token) {
     const auto comp = [](const std::shared_ptr<WaitItem>& left,
                          const std::shared_ptr<WaitItem>& right) {
       return left->due_ < right->due_;
@@ -70,13 +103,22 @@ class TimerQueue {
           std::unique_lock<std::mutex> lock(mutex_);
           if (pending_.empty()) {
             if (wait_queue.empty()) {
+#if REX_TIMER_QUEUE_JTHREAD
               cv_.wait(lock, stop_token, has_pending);
+#else
+              cv_.wait(lock, [&] { return stop_token.stop_requested() || has_pending(); });
+#endif
             } else {
               // Bounded so a far-future due time never reaches the clock
               // conversions inside the wait.
               const auto limit = clock::now() + std::chrono::hours(1);
+#if REX_TIMER_QUEUE_JTHREAD
               cv_.wait_until(lock, stop_token, std::min(wait_queue.front()->due_, limit),
                              has_pending);
+#else
+              cv_.wait_until(lock, std::min(wait_queue.front()->due_, limit),
+                             [&] { return stop_token.stop_requested() || has_pending(); });
+#endif
             }
           }
           wait_items.swap(pending_);
@@ -138,7 +180,7 @@ class TimerQueue {
     return wait_item_weak;
   }
 
-  std::jthread::id dispatch_thread_id() const { return dispatch_thread_.get_id(); }
+  std::thread::id dispatch_thread_id() const { return dispatch_thread_.get_id(); }
 
  private:
   // Wait items queued by the public API and not yet taken by the dispatch
@@ -147,8 +189,15 @@ class TimerQueue {
   std::condition_variable_any cv_;
   std::forward_list<std::shared_ptr<WaitItem>> pending_;
 
+#if !REX_TIMER_QUEUE_JTHREAD
+  std::atomic<bool> stop_{false};
+#endif
   // Declared last: it is stopped and joined before the members above go away.
+#if REX_TIMER_QUEUE_JTHREAD
   std::jthread dispatch_thread_;
+#else
+  std::thread dispatch_thread_;
+#endif
 };
 
 rex::thread::TimerQueue timer_queue_;

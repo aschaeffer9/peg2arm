@@ -16,6 +16,7 @@
 #include <chrono>
 #include <mutex>
 
+#include <rex/atomic_ref.h>
 #include <rex/kernel.h>
 #include <rex/memory.h>
 #include <rex/thread.h>
@@ -120,7 +121,7 @@ struct XMA_CONTEXT_DATA {
   // announces. Keep 32-bit words in BE and publish with release/acquire.
   static uint32_t LoadWord(const void* ptr, size_t index) {
     auto* words = const_cast<uint32_t*>(static_cast<const uint32_t*>(ptr));
-    return rex::byte_swap(std::atomic_ref<uint32_t>(words[index]).load(std::memory_order_acquire));
+    return rex::byte_swap(rex::atomic_ref<uint32_t>(words[index]).load(std::memory_order_acquire));
   }
 
   explicit XMA_CONTEXT_DATA(const void* ptr) {
@@ -131,18 +132,18 @@ struct XMA_CONTEXT_DATA {
   }
 
   void Store(void* ptr) {
-    static_assert(std::atomic_ref<uint32_t>::is_always_lock_free);
-    static_assert(std::atomic_ref<uint32_t>::required_alignment <= alignof(uint32_t));
+    static_assert(rex::atomic_ref<uint32_t>::is_always_lock_free);
+    static_assert(rex::atomic_ref<uint32_t>::required_alignment <= alignof(uint32_t));
     auto* dest = static_cast<uint32_t*>(ptr);
     const auto* words = reinterpret_cast<const uint32_t*>(this);
     // Publish addresses and offsets before the valid bits and the write index.
     // This is not an atomic snapshot of the 64 bytes: changing the configuration
     // still requires disabling/locking the context.
     for (size_t i = 2; i < sizeof(XMA_CONTEXT_DATA) / 4; ++i) {
-      std::atomic_ref<uint32_t>(dest[i]).store(rex::byte_swap(words[i]), std::memory_order_relaxed);
+      rex::atomic_ref<uint32_t>(dest[i]).store(rex::byte_swap(words[i]), std::memory_order_relaxed);
     }
-    std::atomic_ref<uint32_t>(dest[1]).store(rex::byte_swap(words[1]), std::memory_order_release);
-    std::atomic_ref<uint32_t>(dest[0]).store(rex::byte_swap(words[0]), std::memory_order_release);
+    rex::atomic_ref<uint32_t>(dest[1]).store(rex::byte_swap(words[1]), std::memory_order_release);
+    rex::atomic_ref<uint32_t>(dest[0]).store(rex::byte_swap(words[0]), std::memory_order_release);
   }
 
   bool IsInputBufferValid(uint8_t buffer_index) const {

@@ -24,10 +24,8 @@
 #include <rex/platform.h>
 #include <rex/ui/windowed_app_context.h>
 
-#if REX_PLATFORM_ANDROID
-// Multiple apps in a single library instead of separate executables.
-#define XE_UI_WINDOWED_APPS_IN_LIBRARY 1
-#endif
+// Xenia's Android build put several apps in one library (XE_UI_WINDOWED_APPS_IN_LIBRARY). A ReXGlue title is one app
+// on every platform, Android included: its libmain.so defines GetWindowedAppCreator like any executable.
 
 namespace rex {
 namespace ui {

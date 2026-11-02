@@ -102,3 +102,26 @@ It contains DirectXShaderCompiler and LLVM under the University of Illinois/NCSA
 Open Source License, SPIRV-Tools under Apache-2.0, and SPIRV-Headers under MIT.
 Source: [Microsoft DirectXShaderCompiler](https://github.com/microsoft/DirectXShaderCompiler/tree/75a029d95e767f291885e081f71ed951acad0019).
 The source rebuild workflow and wrapper are provided in `shaders/wasm/`.
+
+## Android build (peg2arm)
+
+- **[peggle2-mac](https://github.com/macprotips/peggle2-mac)** (MIT License, Copyright (c) 2026 Josh M): the touch
+  layer (`app/src/peggle2_touch.cpp`) follows its game hooks. It uses the same guest functions and offsets for
+  aiming along the ball's arc, the pointer path and the gamepad tutorial steps. The MIT notice applies to those
+  parts:
+
+  > Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+  > documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+  > the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+  > to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above
+  > copyright notice and this permission notice shall be included in all copies or substantial portions of the
+  > Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+  > LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+  > SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+  > OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+  > DEALINGS IN THE SOFTWARE.
+
+- **[SDL 3](https://libsdl.org)** (zlib License): the Android activity (`SDLActivity`, subclassed in
+  `android/java/com/ari/peggle2/Peggle2Activity.java`) and its native side, linked into `libmain.so`.
+- The optional launcher (`launcher/`) is original code. It contains no art: covers are the user's own images. It
+  starts other installed apps (Peggle Enhanced, Peggle Blast) and contains no code from them.

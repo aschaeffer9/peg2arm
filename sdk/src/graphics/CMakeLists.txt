@@ -96,7 +96,7 @@ if(REXGLUE_USE_D3D12)
         ${REXGPU_XENOS_D3D12_SOURCES})
 endif()
 
-if(REXGLUE_PLATFORM_SWITCH)
+if(REXGLUE_STATIC_RUNTIME)
     # Linked into the executable (gpu_plugin_loader.cpp calls rex_gpu_create
     # directly); a NRO cannot load plugins at run time.
     add_library(rexgpu-xenos STATIC ${REXGPU_XENOS_SOURCES})

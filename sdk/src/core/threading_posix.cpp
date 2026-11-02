@@ -60,6 +60,16 @@ static_assert(REX_PLATFORM_LINUX || REX_PLATFORM_MAC, "This file is POSIX-only")
 
 #include <rex/main_android.h>
 #include <rex/string.h>
+
+// bionic has no robust mutexes (no PTHREAD_MUTEX_ROBUST, pthread_mutexattr_setrobust or pthread_mutex_consistent).
+// The SDK asks for them only as a safeguard against a thread dying with the lock held, which the guest does not do:
+// refusing the attribute keeps ordinary mutexes, so EOWNERDEAD never comes back and the recovery paths never run.
+// (On the Switch, threading_switch.cpp accepts the attribute without providing it, to the same effect.)
+#ifndef PTHREAD_MUTEX_ROBUST
+#define PTHREAD_MUTEX_ROBUST 1
+#endif
+static inline int pthread_mutexattr_setrobust(pthread_mutexattr_t*, int) { return ENOTSUP; }
+static inline int pthread_mutex_consistent(pthread_mutex_t*) { return 0; }
 #endif
 
 #if REX_PLATFORM_LINUX

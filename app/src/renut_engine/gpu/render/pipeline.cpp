@@ -948,6 +948,27 @@ plume::RenderPipeline *TakePrebuilt(const PipelineKey &key, uint64_t hash,
 
 } // namespace
 
+void PackDrawSets(uint32_t *words, size_t word_count) {
+#if RENUT_PACKED_DRAW_SETS
+  static constexpr uint32_t kMap[8] = {0, 0, 0, 1, 0, 2, 3, 4};
+  if (word_count < 5 || words[0] != 0x07230203u)
+    return;
+  // After the five header words each instruction's first word is (word count << 16) | opcode. OpDecorate (71):
+  // target, decoration, literal; DescriptorSet is decoration 34.
+  for (size_t i = 5; i < word_count;) {
+    const uint32_t length = words[i] >> 16, opcode = words[i] & 0xFFFF;
+    if (length == 0)
+      break;
+    if (opcode == 71 && length >= 4 && i + 3 < word_count && words[i + 2] == 34 && words[i + 3] < 8)
+      words[i + 3] = kMap[words[i + 3]];
+    i += length;
+  }
+#else
+  (void)words;
+  (void)word_count;
+#endif
+}
+
 bool BuildDrawLayout(VideoState &s) {
   plume::RenderDescriptorSetBuilder textures;
   textures.begin();
@@ -961,11 +982,16 @@ bool BuildDrawLayout(VideoState &s) {
 
   plume::RenderPipelineLayoutBuilder layout;
   layout.begin(false, true);
+#if RENUT_PACKED_DRAW_SETS
+  layout.addDescriptorSet(textures);  // set 0: Texture2D/3D/Cube/2DArray[] (aliased)
+  layout.addDescriptorSet(samplers);  // set 1: SamplerState[]
+#else
   layout.addDescriptorSet(textures);  // space0 Texture2D[]
   layout.addDescriptorSet(textures);  // space1 Texture3D[]
   layout.addDescriptorSet(textures);  // space2 TextureCube[]
   layout.addDescriptorSet(samplers);  // space3 SamplerState[]
   layout.addDescriptorSet(textures);  // space4 Texture2DArray[] (stacked textures)
+#endif
   plume::RenderDescriptorSetBuilder constants;
   constants.begin();
   constants.addConstantBufferDynamic(0);

@@ -76,6 +76,19 @@ if(REXGLUE_PLATFORM_SWITCH)
         target_sources(${TARGET} PRIVATE "${BANJO_RENUT_SHADER_CACHE_CPP}")
         set_source_files_properties("${BANJO_RENUT_SHADER_CACHE_CPP}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
     endfunction()
+elseif(ANDROID)
+    # Android is a cross build too (the NDK on the Windows host): the same SPIR-V-only cache as the Switch, made from
+    # the PC build's by tools/renut_switch_shader_cache.py (out/renut_switch). plume draws with Vulkan on Android.
+    set(BANJO_RENUT_SHADER_CACHE_CPP "${CMAKE_SOURCE_DIR}/../out/renut_switch/shader_cache_switch.cpp" CACHE FILEPATH
+        "Renut's shader cache for the Android build (from a PC build: tools/renut_switch_shader_cache.py)" FORCE)
+    function(banjo_renut_shader_cache_override TARGET)
+        if(NOT EXISTS "${BANJO_RENUT_SHADER_CACHE_CPP}")
+            message(FATAL_ERROR "No ${BANJO_RENUT_SHADER_CACHE_CPP}: build the PC tree first, then run "
+                                "tools/renut_switch_shader_cache.py")
+        endif()
+        target_sources(${TARGET} PRIVATE "${BANJO_RENUT_SHADER_CACHE_CPP}")
+        set_source_files_properties("${BANJO_RENUT_SHADER_CACHE_CPP}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    endfunction()
 endif()
 
 include("${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/gpu.cmake")

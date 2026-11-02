@@ -9,6 +9,11 @@
 #include <windows.h>
 #elif defined(__SWITCH__)
 #include <switch.h>
+#elif defined(__ANDROID__)
+#include <android/native_window.h>
+
+#include <SDL3/SDL_properties.h>
+#include <SDL3/SDL_video.h>
 #else
 #include <cstdlib>
 
@@ -87,6 +92,50 @@ bool GetRenderWindowPixelSize(uint32_t &width, uint32_t &height) {
     return false;
   width = w;
   height = h;
+  return true;
+}
+
+#elif defined(__ANDROID__)
+
+// Android: SDL's ANativeWindow (its SurfaceView), which plume's VK_KHR_android_surface takes.
+namespace {
+SDL_Window *FindGameSdlWindow() {
+  int count = 0;
+  SDL_Window **windows = SDL_GetWindows(&count);
+  SDL_Window *sdl_window = (windows && count > 0) ? windows[0] : nullptr;
+  SDL_free(windows);
+  return sdl_window;
+}
+
+ANativeWindow *FindNativeWindow() {
+  SDL_Window *sdl_window = FindGameSdlWindow();
+  if (!sdl_window)
+    return nullptr;
+  return static_cast<ANativeWindow *>(SDL_GetPointerProperty(
+      SDL_GetWindowProperties(sdl_window), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr));
+}
+} // namespace
+
+plume::RenderWindow CurrentAndroidWindow() { return FindNativeWindow(); }
+
+bool GetNativeRenderWindow(plume::RenderWindow &out) {
+  out = FindNativeWindow();
+  if (!out) {
+    RGPU_ERROR("No ANativeWindow yet (SDL window: {})", FindGameSdlWindow() ? "yes" : "no");
+    return false;
+  }
+  return true;
+}
+
+bool GetRenderWindowPixelSize(uint32_t &width, uint32_t &height) {
+  ANativeWindow *window = FindNativeWindow();
+  if (!window)
+    return false;
+  const int32_t w = ANativeWindow_getWidth(window), h = ANativeWindow_getHeight(window);
+  if (w <= 0 || h <= 0)
+    return false;
+  width = uint32_t(w);
+  height = uint32_t(h);
   return true;
 }
 
