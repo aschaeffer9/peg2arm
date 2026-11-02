@@ -60,6 +60,9 @@ def main():
     ap.add_argument('--jdk', default='')
     ap.add_argument('--android', default=HERE)
     ap.add_argument('--keystore', default=os.path.join(ROOT, 'out', 'android-debug.keystore'))
+    ap.add_argument('--store-pass-env', default='',
+                    help='name of an environment variable holding the keystore password (default: a debug key, '
+                         'password "android")')
     ap.add_argument('--min-sdk', default='30')
     ap.add_argument('--target-sdk', default='34')
     a = ap.parse_args()
@@ -126,8 +129,9 @@ def main():
              '-keypass', 'android', '-alias', 'peggle2debug', '-keyalg', 'RSA', '-keysize', '2048', '-validity', '10000',
              '-dname', 'CN=Peggle 2 Android debug'], env=env)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    run([tool(build_tools, 'apksigner'), 'sign', '--ks', a.keystore, '--ks-pass', 'pass:android',
-         '--key-pass', 'pass:android', '--out', a.out, aligned], env=env)
+    password = f'env:{a.store_pass_env}' if a.store_pass_env else 'pass:android'
+    run([tool(build_tools, 'apksigner'), 'sign', '--ks', a.keystore, '--ks-pass', password,
+         '--key-pass', password, '--out', a.out, aligned], env=env)
     run([tool(build_tools, 'apksigner'), 'verify', a.out], env=env)
 
     with zipfile.ZipFile(a.out) as z:
