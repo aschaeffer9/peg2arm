@@ -5,8 +5,9 @@
 ## peg2arm: Android
 
 This fork adds an **Android build for 64-bit ARM phones** with touch controls: drag to aim, tap to fire, two fingers
-to speed up, and a pause button. It is built from your own copy, like the other builds. See
-[docs/android.md](docs/android.md). An optional launcher (`launcher/`) shows the Peggle games installed on the phone
+to speed up, and a pause button. It is built from your own copy, like the other builds: double-click
+`install\peg2arm-setup.bat` and follow the steps ([docs/install-easy.md](docs/install-easy.md)); the technical side
+is in [docs/android.md](docs/android.md). An optional launcher (`launcher/`) shows the Peggle games installed on the phone
 as a row of covers you supply yourself.
 
 </div>
