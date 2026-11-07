@@ -11,8 +11,7 @@ It shows only what it finds installed:
 | Peggle 2 | peg2arm, this repository's port (`com.ari.peggle2`) | the port |
 | Peggle Blast | EA's Peggle Blast (`com.ea.game.pegglex_row`) | Peggle Blast |
 
-Each Peggle Enhanced cover also tells Peggle Enhanced which game it is for (an intent extra, `peggle_target`). Its
-released builds don't read that and open at their own title screen. A build that does read it can go straight to the
+Each Peggle Enhanced cover also tells Peggle Enhanced which game it is for (an intent extra, `peggle_target`) so it can go straight to the
 game the cover names.
 
 No cover art comes with the launcher. Until you add your own images, each game is a plain coloured card with its
