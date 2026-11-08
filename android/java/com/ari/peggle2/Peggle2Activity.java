@@ -1,5 +1,6 @@
 package com.ari.peggle2;
 
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Canvas;
@@ -42,11 +43,37 @@ public class Peggle2Activity extends SDLActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // peggle2-android (2026-11): before SDL starts, so the previous run's log is read before the new one
+        // truncates it (Diagnostics): a run that died leaves its logs in Downloads and its reason here.
+        Diagnostics.beforeStart(this);
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         muted = prefs().getBoolean("muted", false);
         sendMenu(muted ? MENU_MUTE : MENU_UNMUTE);
         addButtons();
+        showStartupError();
+    }
+
+    /**
+     * The last run's renderer failure, if it left one: the app came up on a black screen then, and this is where the
+     * player learns why and where the report is. Nothing to show after a normal start.
+     */
+    private void showStartupError() {
+        final String error = Diagnostics.startupError;
+        if (error == null || error.isEmpty()) {
+            return;
+        }
+        Diagnostics.startupError = null;
+        try {
+            new AlertDialog.Builder(this)
+                .setTitle("Peggle 2 could not start")
+                .setMessage(error + "\n\nYour logs were saved to Downloads. Please attach them to a report at\n"
+                    + Diagnostics.ISSUES)
+                .setPositiveButton("OK", null)
+                .show();
+        } catch (Throwable ignored) {
+            // A dialog that cannot be shown must not stop the app.
+        }
     }
 
     private SharedPreferences prefs() {

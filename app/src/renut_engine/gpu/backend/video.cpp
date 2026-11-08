@@ -890,6 +890,12 @@ void SubmitAndAdvance(VideoState &s, plume::RenderCommandSemaphore *wait,
 
 } // namespace detail
 
+namespace {
+std::string g_startup_error;  // peggle2-android: Video::StartupError
+}  // namespace
+
+const std::string &Video::StartupError() { return g_startup_error; }
+
 bool Video::CreateHostDevice() {
   auto &s = State();
   std::lock_guard lock(s.mutex);
@@ -941,6 +947,36 @@ bool Video::CreateHostDevice() {
     return false;
   }
   banjo::renut_gpu::OnDeviceCreated(s.device.get());
+#if defined(__ANDROID__)
+  // peggle2-android (2026-11): what older GPUs (Vulkan 1.1 Mali and Adreno) may lack, checked before anything uses it.
+  // Renut reads its constants' and vertex data's 64-bit addresses in the shaders, so without buffer device addresses
+  // and 64-bit integers the first upload chunk or the first pipeline would crash with nothing in the log. The bindless
+  // texture table is one binding of kTextureDescriptorCount images, which the update-after-bind limit must hold.
+  {
+    const plume::RenderDeviceCapabilities &caps = s.device->getCapabilities();
+    std::string missing;
+    if (!caps.bufferDeviceAddress)
+      missing = "buffer device addresses (VK_KHR_buffer_device_address)";
+    else if (!caps.shaderInt64)
+      missing = "64-bit integers in shaders (shaderInt64)";
+    else if (!caps.descriptorIndexing)
+      missing = "bindless textures (VK_EXT_descriptor_indexing)";
+    else if (caps.maxUpdateAfterBindSampledImages && caps.maxUpdateAfterBindSampledImages < kTextureDescriptorCount)
+      missing = fmt::format("{} bindless textures (the GPU allows {})", kTextureDescriptorCount,
+                            caps.maxUpdateAfterBindSampledImages);
+    if (!missing.empty()) {
+      g_startup_error = "This GPU (" + s.device->getDescription().name + ") lacks a Vulkan feature the game needs: " +
+                        missing + ".";
+      RGPU_ERROR("{}", g_startup_error);
+      return false;
+    }
+  }
+#endif
+  // peggle2-android (2026-11): which draw layout the shaders and pipelines below are built for. Vulkan on Android
+  // allows the spec minimum of 4 bound descriptor sets, so the port uses the packed 3-set layout there.
+  RGPU_INFO("Draw pipeline layout: {} descriptor sets ({})",
+            PackedDrawSets() ? kDrawSetCountPacked : kDrawSetCountUnpacked,
+            PackedDrawSets() ? "packed" : "unpacked");
   s.backend_description =
       std::string(BackendName(ActiveBackend())) + " on " + s.device->getDescription().name;
   RGPU_INFO("Renderer: {}", s.backend_description);

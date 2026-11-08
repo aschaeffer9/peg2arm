@@ -259,6 +259,9 @@ public:
   // Idempotent; safe before the guest runtime exists.
   static bool CreateHostDevice();
   static bool HostReady();
+  // peggle2-android (2026-11): why CreateHostDevice failed, in words a player can act on (empty when the reason is only
+  // in the log).
+  static const std::string &StartupError();
 
   // Stops recording/presenting. Resources are intentionally leaked at exit.
   static void BeginShutdown();

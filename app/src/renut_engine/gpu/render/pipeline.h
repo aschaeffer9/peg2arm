@@ -41,25 +41,62 @@ struct DrawPushConstants {
 
 // banjo-nx: sets 5-7 of the draw layout on Vulkan, one dynamic uniform buffer each (render/upload_ring.h): the
 // vertex shader's float constants, the pixel shader's, SharedConstants.
-// peggle2-android: Adreno allows 7 bound descriptor sets (maxBoundDescriptorSets), the layout above has 8. There the
-// texture table is one set (the shaders' Texture2D/3D/Cube/2DArray arrays all alias set 0 binding 0: the same table,
-// bound four times elsewhere), the samplers set 1 and the constants sets 2-4; PackDrawSets renumbers the shaders' sets.
-#if defined(__ANDROID__)
-#define RENUT_PACKED_DRAW_SETS 1
-constexpr uint32_t kDrawSamplerSet = 1;
-constexpr uint32_t kVertexConstantsSet = 2;
-constexpr uint32_t kPixelConstantsSet = 3;
-constexpr uint32_t kSharedConstantsSet = 4;
-#else
-#define RENUT_PACKED_DRAW_SETS 0
+//
+// peggle2-android (2026-11, the Vulkan 1.1 fix): the unpacked layout above has 8 bound descriptor sets. The Vulkan
+// specification's minimum for maxBoundDescriptorSets is 4, and 4 is what Arm Mali reports (a Fire Max 11's Mali-G57
+// MC2 reports exactly 4; Adreno 830 reports 7, which is why the first Android build packed to 5). 5 is still more
+// than 4, so every Mali device failed to create the draw pipeline layout and the game came up on a black screen.
+//
+// The packed layout has 3 sets and is legal everywhere:
+//   set 0  the texture table, binding 0 (the shaders' Texture2D/3D/Cube/2DArray arrays all alias it: it is one table,
+//          bound four times in the unpacked layout)
+//   set 1  the samplers, binding 0
+//   set 2  the three constant buffers as three dynamic uniform buffer bindings: 0 the vertex shader's float
+//          constants, 1 the pixel shader's, 2 SharedConstants (render/upload_ring.h holds them in one chunk)
+// PackDrawSets renumbers the shaders' decorations to match, including the blocks' bindings (each block was binding 0
+// of its own set, so merging the sets needs distinct bindings).
+//
+// Selected at compile time below: Vulkan on Android, where a device may allow only the spec minimum of 4 sets; off
+// elsewhere, so the Switch's deko3d path and the desktop builds keep the numbering they were built and tested with.
+constexpr uint32_t kDrawSetCountUnpacked = 8;
+constexpr uint32_t kDrawSetCountPacked = 3;
+// Unpacked numbering (the desktop / deko3d path).
 constexpr uint32_t kDrawSamplerSet = 3;
 constexpr uint32_t kVertexConstantsSet = 5;
 constexpr uint32_t kPixelConstantsSet = 6;
 constexpr uint32_t kSharedConstantsSet = 7;
-#endif
+// Packed numbering.
+constexpr uint32_t kPackedTextureSet = 0;
+constexpr uint32_t kPackedSamplerSet = 1;
+constexpr uint32_t kPackedConstantsSet = 2;
+constexpr uint32_t kPackedVertexConstantsBinding = 0;
+constexpr uint32_t kPackedPixelConstantsBinding = 1;
+constexpr uint32_t kPackedSharedConstantsBinding = 2;
+// The three constant blocks held by one chunk of the upload ring, in binding order, as one allocation (see
+// PackedConstantBlockOffsets in draw.cpp: the rare draw whose blocks landed in different chunks).
+constexpr uint32_t kPackedConstantSlot = 4352;   // 4112 rounded up to the uniform buffer offset alignment
+constexpr uint32_t kPackedConstantsBytes = kPackedConstantSlot * 2 + 1360;
+static_assert(kDrawSetCountPacked <= 4,
+              "The packed draw layout must stay within the Vulkan minimum maxBoundDescriptorSets of 4: that is what "
+              "Arm Mali, Imagination PowerVR and Adreno 6xx and older report, and 5 sets is what made every Mali "
+              "device fail to create the draw pipeline layout.");
 
-// peggle2-android: rewrites the DescriptorSet decorations of a draw-layout shader's SPIR-V to the packed numbering
-// (0,1,2,4 -> 0; 3 -> 1; 5,6,7 -> 2,3,4). Does nothing where RENUT_PACKED_DRAW_SETS is 0.
+// Whether the draw layout is the packed one. The Android build is Vulkan only, and its devices may allow the Vulkan
+// minimum of 4 bound descriptor sets, so it is always packed; the Switch's deko3d and the desktop builds keep the
+// 8-set numbering they were built and tested with (deko3d has no such limit, and D3D12 uses root descriptors).
+// (Not a setting on purpose: the unpacked layout has 8 sets, which even Adreno's 7 would not take, so a switch could
+// only ever be turned on where it would not help.)
+inline constexpr bool PackedDrawSets() {
+#if defined(__ANDROID__)
+  return true;
+#else
+  return false;
+#endif
+}
+
+// peggle2-android: rewrites the DescriptorSet and Binding decorations of a draw-layout shader's SPIR-V to the packed
+// numbering (0,1,2,4 -> set 0; 3 -> set 1; 5,6,7 -> set 2 bindings 0,1,2). Does nothing when PackedDrawSets() is
+// false, and does nothing to shaders that are not draw-layout shaders.
 void PackDrawSets(uint32_t *words, size_t word_count);
 
 bool BuildDrawLayout(VideoState &s);

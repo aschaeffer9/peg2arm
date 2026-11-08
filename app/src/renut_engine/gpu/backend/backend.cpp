@@ -503,17 +503,16 @@ std::unique_ptr<plume::RenderShader> CreateHostShader(plume::RenderDevice *devic
     RGPU_ERROR("Host shader '{}' has no {} blob", name, BackendName(ActiveBackend()));
     return nullptr;
   }
-#if RENUT_PACKED_DRAW_SETS
-  // peggle2-android: the geometry shaders of the draw layout read SharedConstants: its set renumbered (PackDrawSets).
-  std::vector<uint32_t> packed;
-  if (vulkan && (std::strcmp(name, "rectangle_list_gs") == 0 || std::strcmp(name, "point_sprite_gs") == 0) &&
+  if (PackedDrawSets() && vulkan &&
+      (std::strcmp(name, "rectangle_list_gs") == 0 || std::strcmp(name, "point_sprite_gs") == 0) &&
       size % 4 == 0) {
-    packed.resize(size / 4);
+    // peggle2-android: the geometry shaders of the draw layout read SharedConstants: its set renumbered
+    // (PackDrawSets), as the guest shaders' are.
+    std::vector<uint32_t> packed(size / 4);
     std::memcpy(packed.data(), data, size);
     PackDrawSets(packed.data(), packed.size());
     data = packed.data();
   }
-#endif
   auto shader = device->createShader(data, size, "main", HostShaderFormat());
   if (!shader)
     RGPU_ERROR("createShader failed for host shader '{}'", name);

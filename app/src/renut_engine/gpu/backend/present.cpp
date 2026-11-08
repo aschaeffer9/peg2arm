@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdio>
 #include <cstdlib>
 #include <mutex>
 #include <string>
@@ -433,6 +434,14 @@ void PresentLocked(VideoState &s, const PresentImage *image) {
   }
   if (!presented)
     s.resize_requested.store(true, std::memory_order_release);
+#if defined(__ANDROID__)
+  // peggle2-android (2026-11): the start-up worked. Diagnostics.java writes logs/session.lock at launch and exports the
+  // logs of a launch that finds it; past ~10 s of presented frames this run is not a start-up failure, and an ordinary
+  // kill later (Recents, the system) must not look like one. (The working directory is the app's files folder.)
+  static uint32_t presents_until_started = 600;
+  if (presented && presents_until_started && --presents_until_started == 0)
+    std::remove("logs/session.lock");
+#endif
 }
 
 } // namespace

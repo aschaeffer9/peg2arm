@@ -10,6 +10,7 @@
 #include "renut_engine/gpu/banjo_renut_tuning.h"  // banjo-nx: banjo_renut_memory_policy
 #include "renut_engine/gpu/backend/video.h"
 #include "renut_engine/gpu/log.h"
+#include "renut_engine/gpu/render/pipeline.h"  // peggle2-android: PackedDrawSets
 
 namespace renut::gpu {
 
@@ -48,22 +49,43 @@ bool UploadRing::AddChunk(uint64_t min_size) {
   chunk.mapped = static_cast<uint8_t *>(mapped);
   chunk.size = size;
   if (constant_sets_) {
-    // One dynamic uniform buffer each, the layout of sets 5-7 of the draw layout (render/pipeline.cpp).
-    auto make_set = [&](uint32_t range) {
+    if (PackedDrawSets()) {
+      // peggle2-android: set 2 of the packed draw layout (render/pipeline.cpp): the three constant blocks as three
+      // dynamic uniform buffer bindings of one set over this chunk, selected by three dynamic offsets at bind time.
       plume::RenderDescriptorSetBuilder builder;
       builder.begin();
-      builder.addConstantBufferDynamic(0);
+      builder.addConstantBufferDynamic(kPackedVertexConstantsBinding);
+      builder.addConstantBufferDynamic(kPackedPixelConstantsBinding);
+      builder.addConstantBufferDynamic(kPackedSharedConstantsBinding);
       builder.end();
-      std::unique_ptr<plume::RenderDescriptorSet> set = builder.create(device_);
-      if (set)
-        set->setBuffer(0, buffer.get(), range);
-      return set;
-    };
-    chunk.float_constants_set = make_set(kFloatConstantsUboBytes);
-    chunk.shared_constants_set = make_set(kSharedConstantsUboBytes);
-    if (!chunk.float_constants_set || !chunk.shared_constants_set) {
-      RGPU_ERROR("Upload ring '{}': constant descriptor sets failed", name_);
-      return false;
+      chunk.constants_set = builder.create(device_);
+      if (chunk.constants_set) {
+        chunk.constants_set->setBuffer(kPackedVertexConstantsBinding, buffer.get(), kFloatConstantsUboBytes);
+        chunk.constants_set->setBuffer(kPackedPixelConstantsBinding, buffer.get(), kFloatConstantsUboBytes);
+        chunk.constants_set->setBuffer(kPackedSharedConstantsBinding, buffer.get(), kSharedConstantsUboBytes);
+      }
+      if (!chunk.constants_set) {
+        RGPU_ERROR("Upload ring '{}': packed constant descriptor set failed", name_);
+        return false;
+      }
+    } else {
+      // One dynamic uniform buffer each, the layout of sets 5-7 of the draw layout (render/pipeline.cpp).
+      auto make_set = [&](uint32_t range) {
+        plume::RenderDescriptorSetBuilder builder;
+        builder.begin();
+        builder.addConstantBufferDynamic(0);
+        builder.end();
+        std::unique_ptr<plume::RenderDescriptorSet> set = builder.create(device_);
+        if (set)
+          set->setBuffer(0, buffer.get(), range);
+        return set;
+      };
+      chunk.float_constants_set = make_set(kFloatConstantsUboBytes);
+      chunk.shared_constants_set = make_set(kSharedConstantsUboBytes);
+      if (!chunk.float_constants_set || !chunk.shared_constants_set) {
+        RGPU_ERROR("Upload ring '{}': constant descriptor sets failed", name_);
+        return false;
+      }
     }
   }
   chunk.buffer = std::move(buffer);
@@ -139,6 +161,8 @@ UploadAllocation UploadRing::Allocate(uint64_t size, uint64_t alignment) {
       out.chunk_size = chunk.size;  // banjo-nx
       out.float_constants_set = chunk.float_constants_set.get();
       out.shared_constants_set = chunk.shared_constants_set.get();
+      out.constants_set = chunk.constants_set.get();
+      out.chunk_buffer = chunk.buffer.get();
       offset_ = aligned + size;
       chunk.written = offset_;
       return out;
@@ -168,6 +192,8 @@ UploadAllocation UploadRing::AllocateWithRoom(uint64_t size, uint64_t room, uint
       out.chunk_size = chunk.size;
       out.float_constants_set = chunk.float_constants_set.get();
       out.shared_constants_set = chunk.shared_constants_set.get();
+      out.constants_set = chunk.constants_set.get();
+      out.chunk_buffer = chunk.buffer.get();
       offset_ = aligned + size;
       chunk.written = offset_;
       return out;

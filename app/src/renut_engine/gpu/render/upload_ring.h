@@ -36,6 +36,11 @@ struct UploadAllocation {
   // Vulkan (UploadRing::Init with constant_sets): the chunk's uniform buffer descriptor sets.
   plume::RenderDescriptorSet *float_constants_set = nullptr;
   plume::RenderDescriptorSet *shared_constants_set = nullptr;
+  // peggle2-android: the packed draw layout's set 2, the three blocks as bindings 0, 1 and 2 of one set over this
+  // chunk (null on the unpacked layout), and the chunk's buffer (a draw that finds its three blocks in one chunk
+  // binds this set with three offsets; see BindPackedConstants in render/draw.cpp).
+  plume::RenderDescriptorSet *constants_set = nullptr;
+  plume::RenderBuffer *chunk_buffer = nullptr;
   explicit operator bool() const { return cpu != nullptr; }
 };
 
@@ -81,6 +86,9 @@ private:
     uint64_t size = 0;
     uint64_t address = 0;
     std::unique_ptr<plume::RenderDescriptorSet> float_constants_set, shared_constants_set;
+    // peggle2-android: the packed draw layout's set 2 (three bindings over this chunk's buffer); null unless the
+    // packed layout is in use.
+    std::unique_ptr<plume::RenderDescriptorSet> constants_set;
     uint64_t written = 0, published = 0;  // host_cached: the allocated extent, and how much of it Publish() flushed
   };
 

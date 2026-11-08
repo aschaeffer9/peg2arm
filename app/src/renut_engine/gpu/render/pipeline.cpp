@@ -949,24 +949,94 @@ plume::RenderPipeline *TakePrebuilt(const PipelineKey &key, uint64_t hash,
 } // namespace
 
 void PackDrawSets(uint32_t *words, size_t word_count) {
-#if RENUT_PACKED_DRAW_SETS
-  static constexpr uint32_t kMap[8] = {0, 0, 0, 1, 0, 2, 3, 4};
+  if (!PackedDrawSets())
+    return;
   if (word_count < 5 || words[0] != 0x07230203u)
     return;
   // After the five header words each instruction's first word is (word count << 16) | opcode. OpDecorate (71):
-  // target, decoration, literal; DescriptorSet is decoration 34.
-  for (size_t i = 5; i < word_count;) {
+  // target, decoration, literal. DescriptorSet is decoration 34, Binding 33.
+  //
+  // The three constant blocks are binding 0 of their own sets (5, 6, 7); merged into set 2 they need distinct
+  // bindings 0, 1 and 2, so the Binding decorations have to be rewritten too. Which block a Binding belongs to is
+  // known only from its target's DescriptorSet decoration, and the two may come in either order, so the sets are
+  // collected first.
+  struct DecoratedTarget {
+    uint32_t id;
+    uint32_t set;
+  };
+  DecoratedTarget targets[64];
+  size_t target_count = 0;
+  bool targets_full = false;
+  // The Binding decorations as the shader had them (the second pass rewrites them in place, in either order).
+  DecoratedTarget bindings[64];  // .set holds the binding here
+  size_t binding_count = 0;
+  for (size_t i = 5; i + 3 < word_count;) {
     const uint32_t length = words[i] >> 16, opcode = words[i] & 0xFFFF;
     if (length == 0)
       break;
-    if (opcode == 71 && length >= 4 && i + 3 < word_count && words[i + 2] == 34 && words[i + 3] < 8)
-      words[i + 3] = kMap[words[i + 3]];
+    if (opcode == 71 && length >= 4 && words[i + 2] == 34 && words[i + 3] < 8) {
+      if (target_count < sizeof(targets) / sizeof(targets[0])) {
+        targets[target_count].id = words[i + 1];
+        targets[target_count].set = words[i + 3];
+        ++target_count;
+      } else {
+        targets_full = true;
+      }
+    } else if (opcode == 71 && length >= 4 && words[i + 2] == 33) {
+      if (binding_count < sizeof(bindings) / sizeof(bindings[0])) {
+        bindings[binding_count].id = words[i + 1];
+        bindings[binding_count].set = words[i + 3];
+        ++binding_count;
+      } else {
+        targets_full = true;
+      }
+    }
     i += length;
   }
-#else
-  (void)words;
-  (void)word_count;
-#endif
+  if (!target_count)
+    return;
+  if (targets_full)
+    RGPU_ERROR("PackDrawSets: more than {} descriptor decorations in one shader; the rest keep their bindings",
+               sizeof(targets) / sizeof(targets[0]));
+  auto set_of = [&targets, target_count](uint32_t id) -> int32_t {
+    for (size_t k = 0; k < target_count; ++k) {
+      if (targets[k].id == id)
+        return int32_t(targets[k].set);
+    }
+    return -1;
+  };
+  auto unknown_constant_binding = [&bindings, binding_count](uint32_t id) -> bool {
+    for (size_t k = 0; k < binding_count; ++k) {
+      if (bindings[k].id == id && bindings[k].set != 0) {
+        RGPU_ERROR("PackDrawSets: a constant block at binding {} of its set; this port knows only binding 0",
+                   bindings[k].set);
+        return true;
+      }
+    }
+    return false;
+  };
+  // 0, 1, 2 and 4 (the texture table, bound four times) -> set 0; 3 (the samplers) -> set 1; 5, 6 and 7 (the
+  // constants) -> set 2.
+  static constexpr uint32_t kSetMap[8] = {0, 0, 0, 1, 0, 2, 2, 2};
+  for (size_t i = 5; i + 3 < word_count;) {
+    const uint32_t length = words[i] >> 16, opcode = words[i] & 0xFFFF;
+    if (length == 0)
+      break;
+    if (opcode == 71 && length >= 4) {
+      const uint32_t id = words[i + 1], decoration = words[i + 2];
+      if (decoration == 34 && words[i + 3] < 8) {
+        // A constant block that is not binding 0 of its own set is not a layout this port knows: it keeps its old set
+        // (5-7, which the packed layout does not have), so its pipeline fails instead of reading the wrong buffer.
+        if (!(words[i + 3] >= 5 && unknown_constant_binding(id)))
+          words[i + 3] = kSetMap[words[i + 3]];
+      } else if (decoration == 33) {
+        const int32_t set = set_of(id);
+        if (set >= 5 && set <= 7 && words[i + 3] == 0)
+          words[i + 3] = uint32_t(set - 5);
+      }
+    }
+    i += length;
+  }
 }
 
 bool BuildDrawLayout(VideoState &s) {
@@ -982,25 +1052,37 @@ bool BuildDrawLayout(VideoState &s) {
 
   plume::RenderPipelineLayoutBuilder layout;
   layout.begin(false, true);
-#if RENUT_PACKED_DRAW_SETS
-  layout.addDescriptorSet(textures);  // set 0: Texture2D/3D/Cube/2DArray[] (aliased)
-  layout.addDescriptorSet(samplers);  // set 1: SamplerState[]
-#else
-  layout.addDescriptorSet(textures);  // space0 Texture2D[]
-  layout.addDescriptorSet(textures);  // space1 Texture3D[]
-  layout.addDescriptorSet(textures);  // space2 TextureCube[]
-  layout.addDescriptorSet(samplers);  // space3 SamplerState[]
-  layout.addDescriptorSet(textures);  // space4 Texture2DArray[] (stacked textures)
-#endif
+  if (PackedDrawSets()) {
+    layout.addDescriptorSet(textures);  // set 0: Texture2D/3D/Cube/2DArray[] (aliased), binding 0
+    layout.addDescriptorSet(samplers);  // set 1: SamplerState[], binding 0
+  } else {
+    layout.addDescriptorSet(textures);  // space0 Texture2D[]
+    layout.addDescriptorSet(textures);  // space1 Texture3D[]
+    layout.addDescriptorSet(textures);  // space2 TextureCube[]
+    layout.addDescriptorSet(samplers);  // space3 SamplerState[]
+    layout.addDescriptorSet(textures);  // space4 Texture2DArray[] (stacked textures)
+  }
   plume::RenderDescriptorSetBuilder constants;
   constants.begin();
-  constants.addConstantBufferDynamic(0);
+  if (PackedDrawSets()) {
+    // Set 2, bindings 0, 1 and 2 (PackDrawSets renumbers the shaders' blocks to match): one dynamic uniform buffer
+    // each, from the upload ring's chunk (render/upload_ring.h).
+    constants.addConstantBufferDynamic(kPackedVertexConstantsBinding);
+    constants.addConstantBufferDynamic(kPackedPixelConstantsBinding);
+    constants.addConstantBufferDynamic(kPackedSharedConstantsBinding);
+  } else {
+    constants.addConstantBufferDynamic(0);
+  }
   constants.end();
   if (UsesVulkanBindings()) {  // banjo-nx: and deko3d
-    // banjo-nx: the guest shaders' constants (sets 5-7, kVertexConstantsSet...).
-    layout.addDescriptorSet(constants);
-    layout.addDescriptorSet(constants);
-    layout.addDescriptorSet(constants);
+    // banjo-nx: the guest shaders' constants (sets 5-7, kVertexConstantsSet...). Packed into one set on Android.
+    if (PackedDrawSets()) {
+      layout.addDescriptorSet(constants);  // set 2
+    } else {
+      layout.addDescriptorSet(constants);
+      layout.addDescriptorSet(constants);
+      layout.addDescriptorSet(constants);
+    }
     // Geometry too: point_sprite_gs reads SharedConstants.
     layout.addPushConstant(0, 4, sizeof(DrawPushConstants),
                            plume::RenderShaderStageFlag::VERTEX | plume::RenderShaderStageFlag::GEOMETRY |
@@ -1015,7 +1097,11 @@ bool BuildDrawLayout(VideoState &s) {
   layout.end();
   s.draw_layout = layout.create(s.device.get());
   if (!s.draw_layout) {
-    RGPU_ERROR("Draw pipeline layout creation failed");
+    // The Vulkan minimum for maxBoundDescriptorSets is 4, and Mali reports exactly that; a failure here is almost
+    // always a device that allows fewer sets than the layout has (the log says which).
+    RGPU_ERROR("Draw pipeline layout creation failed ({} descriptor sets, packed {}); this device's "
+               "maxBoundDescriptorSets is in the GPU report",
+               PackedDrawSets() ? kDrawSetCountPacked : kDrawSetCountUnpacked, PackedDrawSets());
     return false;
   }
   return true;

@@ -12,7 +12,10 @@ param(
     [string]$Python = '',                                        # Python 3.12 (default: the one on PATH)
     [string]$CMakeDir = '',                                      # folder with cmake.exe and ninja.exe (default: PATH)
     [string]$Device = '',                                        # adb serial or ip:port to install on (optional)
-    [string]$Keystore = ''                                       # signing key (default: out\android-debug.keystore)
+    [string]$Keystore = '',                                      # signing key (default: out\android-debug.keystore)
+    [int]$MinSdk = 30                                            # android-30 = Android 11 (Amazon Fire OS 8); the
+                                                                 # NDK platform and the APK's minSdkVersion both
+                                                                 # come from it, so they cannot disagree
 )
 
 $ErrorActionPreference = 'Continue'
@@ -61,12 +64,14 @@ if (-not (Test-Path $cache) -or (Get-Item 'out\pc\renut_gpu\shader_cache.cpp').L
 # 2. Calls to hooked game functions go through their hooks (the codegen step may predate a hook).
 Step 'Direct calls (hooks respected)' 'out\android_direct_calls.log' "`"$Py`" tools\direct_calls.py --redo"
 
-# 3. Configure + build.
+# 3. Configure + build. The NDK platform is the APK's minSdkVersion: one number for both, so the library's API level
+#    and the manifest's cannot contradict each other (the build used to say 31 while a Fire tablet needs 30).
+Log ("Android API level: android-{0}" -f $MinSdk)
 $PyFwd = $Py.Replace('\', '/')
 $NdkFwd = $Ndk.Replace('\', '/')
 $configure = "cmake -S app -B out/android -G Ninja " +
     "-DCMAKE_TOOLCHAIN_FILE=$NdkFwd/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a " +
-    "-DANDROID_PLATFORM=android-31 -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=RelWithDebInfo " +
+    "-DANDROID_PLATFORM=android-$MinSdk -DANDROID_STL=c++_static -DCMAKE_BUILD_TYPE=RelWithDebInfo " +
     "-DREXGLUE_ENABLE_TRACY=OFF -DREXGLUE_USE_VULKAN=ON " +
     "`"-DPython3_EXECUTABLE=$PyFwd`" `"-DPYTHON_EXECUTABLE=$PyFwd`""
 Step 'Configure Android build' 'out\android_configure.log' $configure
@@ -77,7 +82,7 @@ Log ("  OK  {0} ({1:N1} MB)" -f $so.FullName, ($so.Length / 1MB))
 
 # 4. APK.
 $apk = Join-Path $Src 'out\android\peggle2.apk'
-Step 'Package APK' 'out\android_package.log' "`"$Py`" tools\android\package_apk.py --so `"$($so.FullName)`" --out `"$apk`" --ndk `"$Ndk`" --keystore `"$Keystore`"" 'package_apk:|error|Error|FAILED'
+Step 'Package APK' 'out\android_package.log' "`"$Py`" tools\android\package_apk.py --so `"$($so.FullName)`" --out `"$apk`" --ndk `"$Ndk`" --keystore `"$Keystore`" --min-sdk $MinSdk" 'package_apk:|error|Error|FAILED'
 Log ("  OK  {0} ({1:N1} MB)" -f $apk, ((Get-Item $apk).Length / 1MB))
 
 if (-not $Device) { Log "Done (not installed: pass -Device to install over adb)."; exit 0 }

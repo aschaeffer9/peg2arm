@@ -1,9 +1,16 @@
 # peg2arm: Peggle 2 on Android
 
 peg2arm builds peggle2-nx for 64-bit ARM Android phones, with touch controls. It was developed on a Galaxy S25+
-(Snapdragon 8 Elite, Adreno 830, Android 16) and needs a phone with Vulkan 1.1 and arm64-v8a. It uses the same
-recompiled game and the same Renut renderer as the Switch and PC builds. Graphics go through Vulkan, through SDL3's
-Android activity.
+(Snapdragon 8 Elite, Adreno 830, Android 16) and needs a device with **Vulkan 1.1, arm64-v8a and Android 11 (API 30)
+or newer** — that includes Amazon Fire OS 8 tablets (a Fire Max 11's Mali-G57 MC2 reports Vulkan 1.1.131). It uses the
+same recompiled game and the same Renut renderer as the Switch and PC builds. Graphics go through Vulkan, through
+SDL3's Android activity.
+
+One warning about 1.1: it is the *minimum* the port is built for, not a formality. A Vulkan 1.1 driver may allow only
+4 bound descriptor sets, and buffer device addresses (which the renderer's shaders read their data through) are an
+extension there, not core. 0.1 got both wrong, and on such a GPU it showed a black screen, not an error message. Since
+0.2 the renderer also checks, at start-up, the features it cannot run without (`VK_KHR_buffer_device_address`,
+`shaderInt64`, descriptor indexing, and room for its 8192-texture table) and names the missing one instead.
 
 As with the other builds, nothing from the game is in this repository. You make everything from your own copy of
 the game.
@@ -59,7 +66,9 @@ The aim, pointer and tutorial handling follows [peggle2-mac](https://github.com/
 
    1. Converts the PC shader cache to SPIR-V.
    2. Makes sure every hooked game function is called through its hook (`tools/direct_calls.py --redo`).
-   3. Builds `libmain.so` with the NDK's CMake toolchain (`android-31`, arm64-v8a, static libc++).
+   3. Builds `libmain.so` with the NDK's CMake toolchain (`android-30`, arm64-v8a, static libc++). The NDK platform
+      is the APK's `minSdkVersion`, from the script's `-MinSdk` (default 30): one number for both, so the library's
+      API level and the manifest's cannot disagree.
    4. Packages and signs the APK without Gradle (`tools/android/package_apk.py`), with a debug key made in `out/` the
       first time.
 
@@ -105,9 +114,19 @@ Uninstalling the app deletes this folder, saves included. Copy `peggle2/` somewh
   loads it, subclassed in `android/java/com/ari/peggle2/Peggle2Activity.java`. That subclass adds the pause and
   sound buttons and handles the back gesture.
 - **Renderer changes.**
-  - The draw layout packs its 8 descriptor sets into 5, because Adreno allows 7. The four texture-table views share
-    one set, and the shaders' set numbers are rewritten as they load (`PackDrawSets` in
-    `app/src/renut_engine/gpu/render/pipeline.cpp`).
+  - The draw layout packs its 8 descriptor sets into **3**: the texture table (the four views share one set), the
+    samplers, and the three constant buffers as three dynamic uniform buffer bindings of one set. The shaders' set
+    and binding numbers are rewritten as they load (`PackDrawSets` in
+    `app/src/renut_engine/gpu/render/pipeline.cpp`). 3 matters: the Vulkan minimum for `maxBoundDescriptorSets` is 4,
+    and Arm Mali reports exactly 4 (a Fire Max 11's Mali-G57 MC2 does), so anything above 4 fails to create the draw
+    pipeline layout on Mali and the game comes up on a black screen. Adreno reports 7, which is why the first build's
+    5 was enough to hide the problem. The layout is chosen at compile time (`PackedDrawSets()`): the unpacked 8-set
+    one stays on the Switch (deko3d has no such limit) and on the desktop builds.
+  - On a Vulkan 1.1 device, buffer device addresses come from `vkGetBufferDeviceAddressKHR` (plume loaded only the
+    core 1.2 name, which a 1.1 driver need not have), and the memory allocator is told the device's Vulkan version,
+    not the instance's (`app/thirdparty/plume/plume_vulkan.cpp`).
+  - The renderer's shaders are SPIR-V 1.0 (the translator's DXC call names no target environment), which every
+    Vulkan 1.1 driver accepts; a module newer than 1.3 is reported in the log.
   - The swapchain is RGBA8, because Android has no BGRA8 surfaces.
   - The swapchain is rebuilt whenever Android gives the app a new surface, which happens on coming back from the
     background.
@@ -118,6 +137,29 @@ Uninstalling the app deletes this folder, saves included. Copy `peggle2/` somewh
 - **Diagnostics.** If a file named `stack_dumps` exists in the app folder, every thread's native stack is logged to
   logcat (tag `peggle2-stacks`) 20 and 40 seconds after the start. Release phones don't let adb dump an app's
   threads.
+
+## When it does not start
+
+The app folder is invisible to file managers and to USB transfers (Android 11 and later), so the port hands its logs
+to the player instead of expecting them to find them:
+
+- A launch writes `logs/session.lock`, and the native side removes it once about 10 seconds of frames have been
+  shown, or on the game's own Exit. A launch that finds the marker knows the last start-up never got that far — a
+  GPU fault kills the process without running any of our code — and copies the
+  text logs and a device report into **`Downloads/Peggle2-logs-<model>-<date>.zip`** before the new run truncates
+  the log (`android/java/com/ari/peggle2/Diagnostics.java`).
+- If the renderer could not start, `logs/startup_error.txt` is written with the reason (for example the Vulkan
+  feature the GPU lacks), and the next launch shows it in a dialog with the issue tracker's address
+  (`app_integration.cpp`, `NoteStartupFailure`).
+- The decisive lines are at the top of `logs/plume_stderr.log`: the `[android]` block prints the GPU's name, driver,
+  API version, descriptor-indexing features and descriptor limits, including `maxBoundDescriptorSets`, and whether it
+  has buffer device addresses and `shaderInt64`. Everything the
+  renderer refuses to do is printed next to it.
+
+To read them on the machine instead: `adb pull /sdcard/Android/data/com.ari.peggle2/files/logs/`.
+
+**Updating a build you made yourself:** `tools/android/update_android.ps1` rebuilds with the key your first build
+made, so installing over the old app keeps the 2.7 GB of game data and the save. Do not uninstall first.
 
 ## The launcher (optional)
 

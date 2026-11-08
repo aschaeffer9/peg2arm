@@ -3,8 +3,8 @@
      libmain.so (the game, the SDK, SDL and the renderer in one library) and runs SDL_main on its own thread. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.ari.peggle2"
-    android:versionCode="1"
-    android:versionName="0.1">
+    android:versionCode="2"
+    android:versionName="0.2">
 
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

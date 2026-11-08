@@ -4645,6 +4645,7 @@ namespace plume {
         deviceFeatures.pNext = featuresChain;
         vkGetPhysicalDeviceFeatures2(physicalDevice, &deviceFeatures);
 
+        uint32_t updateAfterBindSampledImages = 0;  // peggle2-android: 0 = not queried
 #if defined(__ANDROID__)
         // peggle2-android: what the bindless texture tables (renut's 4 x 8192 sampled images, 256 samplers, update after
         // bind) depend on, on this GPU (stderr goes to logs/plume_stderr.log).
@@ -4673,6 +4674,13 @@ namespace plume {
                 indexingProps.maxPerStageUpdateAfterBindResources, indexingProps.maxDescriptorSetUpdateAfterBindSampledImages,
                 indexingProps.maxDescriptorSetUpdateAfterBindSamplers, indexingProps.maxUpdateAfterBindDescriptorsInAllPools,
                 l.maxPushConstantsSize);
+            // peggle2-android (2026-11): the rest of what the renderer needs, so a report from a GPU that cannot run it
+            // says which part is missing (Renut reads constants, vertex fetch data and memexport by 64-bit address).
+            fprintf(stderr, "[android] VK_KHR_buffer_device_address listed %d; bufferDeviceAddress %u shaderInt64 %u "
+                "scalarBlockLayout %u geometryShader %u\n", int(bufferDeviceAddressFound),
+                bufferDeviceAddressFeatures.bufferDeviceAddress, deviceFeatures.features.shaderInt64,
+                layoutFeatures.scalarBlockLayout, deviceFeatures.features.geometryShader);
+            updateAfterBindSampledImages = indexingProps.maxPerStageDescriptorUpdateAfterBindSampledImages;
         }
 #endif
 
@@ -4741,7 +4749,7 @@ namespace plume {
             createDeviceChain = &pipelineRobustnessFeatures;
         }
 
-        const bool bufferDeviceAddressSupported = bufferDeviceAddressFeatures.bufferDeviceAddress;
+        bool bufferDeviceAddressSupported = bufferDeviceAddressFeatures.bufferDeviceAddress;
         if (bufferDeviceAddressSupported) {
             bufferDeviceAddressFeatures.pNext = createDeviceChain;
             createDeviceChain = &bufferDeviceAddressFeatures;
@@ -4855,6 +4863,23 @@ namespace plume {
             }
         }
 
+        // peggle2-android (2026-11): on a Vulkan 1.1 device buffer device addresses come from VK_KHR_buffer_device_address,
+        // whose entry point is vkGetBufferDeviceAddressKHR. volk loaded the core 1.2 name through the instance, which a
+        // 1.1 driver need not provide (null, or a loader trampoline into nothing): getDeviceAddress would crash. The
+        // extension's function is the same function; on a 1.2+ device nothing changes.
+        const uint32_t deviceApiVersion = VK_MAKE_API_VERSION(0, VK_API_VERSION_MAJOR(physicalDeviceProperties.apiVersion),
+            VK_API_VERSION_MINOR(physicalDeviceProperties.apiVersion), 0);
+        if (bufferDeviceAddressSupported && deviceApiVersion < VK_API_VERSION_1_2) {
+            const PFN_vkGetBufferDeviceAddress khr =
+                reinterpret_cast<PFN_vkGetBufferDeviceAddress>(vkGetDeviceProcAddr(vk, "vkGetBufferDeviceAddressKHR"));
+            if (khr != nullptr) {
+                vkGetBufferDeviceAddress = khr;
+            } else {
+                fprintf(stderr, "bufferDeviceAddress is reported but vkGetBufferDeviceAddressKHR is missing.\n");
+                bufferDeviceAddressSupported = false;
+            }
+        }
+
         VmaVulkanFunctions vmaFunctions = {};
         vmaFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
         vmaFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
@@ -4888,7 +4913,8 @@ namespace plume {
         allocatorInfo.device = vk;
         allocatorInfo.pVulkanFunctions = &vmaFunctions;
         allocatorInfo.instance = renderInterface->instance;
-        allocatorInfo.vulkanApiVersion = renderInterface->appInfo.apiVersion;
+        // peggle2-android (2026-11): VMA's version must not exceed the device's (a 1.1 device under the 1.2 instance).
+        allocatorInfo.vulkanApiVersion = std::min(renderInterface->appInfo.apiVersion, deviceApiVersion);
 
         res = vmaCreateAllocator(&allocatorInfo, &allocator);
         if (res != VK_SUCCESS) {
@@ -4929,6 +4955,8 @@ namespace plume {
         capabilities.descriptorIndexing = descriptorIndexingSupported;
         capabilities.scalarBlockLayout = scalarBlockLayoutSupported;
         capabilities.bufferDeviceAddress = bufferDeviceAddressSupported;
+        capabilities.shaderInt64 = deviceFeatures.features.shaderInt64;  // peggle2-android
+        capabilities.maxUpdateAfterBindSampledImages = updateAfterBindSampledImages;  // peggle2-android (0: unknown)
         capabilities.samplerMirrorClampToEdge = supportedOptionalExtensions.find(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME) != supportedOptionalExtensions.end();
         capabilities.presentWait = presentWaitSupported;
         capabilities.displayTiming = supportedOptionalExtensions.find(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME) != supportedOptionalExtensions.end();

@@ -5,7 +5,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
+#include <filesystem>
 #include <functional>
+#include <system_error>
 #include <thread>
 #include <utility>
 
@@ -22,6 +25,20 @@
 namespace renut::gpu {
 
 namespace {
+
+// peggle2-android (2026-11): a renderer that cannot start used to leave a black screen and nothing else - the reason
+// went to the port's own log, which a player cannot open (Android/data is invisible to file managers and there is
+// usually no adb). The reason is written here, and the activity reads it on the next start to show it with the
+// diagnostics export (android/java/.../Peggle2Activity.java), so a report says what failed.
+void NoteStartupFailure(const char *reason) {
+  std::fprintf(stderr, "peggle2: renderer start failed: %s\n", reason);  // logs/plume_stderr.log
+  std::error_code ec;
+  std::filesystem::create_directories("logs", ec);
+  if (std::FILE *file = std::fopen("logs/startup_error.txt", "w")) {
+    std::fprintf(file, "%s\n", reason);
+    std::fclose(file);
+  }
+}
 
 // The SDK's menus (F3, F4, console, achievements), drawn by its ImGuiDrawer
 // on the UI thread, which owns their ImGui; OverlayDrawer records the frame
@@ -95,6 +112,8 @@ bool StartRenderer(rex::ui::WindowedAppContext &app_context,
                    std::function<rex::ui::ImGuiDrawer *()> imgui_drawer) {
   if (!Video::CreateHostDevice()) {
     RGPU_ERROR("Renderer initialisation failed");
+    NoteStartupFailure(Video::StartupError().empty() ? "The renderer could not start on this device's GPU driver."
+                                                     : Video::StartupError().c_str());
     return false;
   }
   // reNut's own overlay (overlay_ui.h), built on the UI thread with the SDK's.

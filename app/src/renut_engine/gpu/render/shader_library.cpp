@@ -148,6 +148,21 @@ std::unique_ptr<plume::RenderShader> CreateCachedShader(plume::RenderDevice *dev
       return nullptr;
     }
     PackDrawSets(reinterpret_cast<uint32_t *>(spirv.data()), spirv.size() / 4);  // peggle2-android
+    // peggle2-android (2026-11): a module newer than SPIR-V 1.3 (the newest a Vulkan 1.1 driver must accept) is
+    // rejected at vkCreateShaderModule, which shows up only as a black screen. The translator's DXC call names no
+    // target environment (SPIR-V 1.0); this says so, once, if a module ever comes out newer.
+    if (spirv.size() >= 20) {
+      const uint32_t version = reinterpret_cast<const uint32_t *>(spirv.data())[1];
+      if (version > 0x00010300u) {
+        static bool logged = false;
+        if (!logged) {
+          logged = true;
+          RGPU_ERROR("Shader {:016X} is SPIR-V {}.{}: a Vulkan 1.1 device may reject it (the cache's DXC call must "
+                     "target SPIR-V 1.3 or older)",
+                     entry.hash, version >> 16, (version >> 8) & 0xFFu);
+        }
+      }
+    }
     return device->createShader(spirv.data(), spirv.size(), "main",
                                 plume::RenderShaderFormat::SPIRV);
   }

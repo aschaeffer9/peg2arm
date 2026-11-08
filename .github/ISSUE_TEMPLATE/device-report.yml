@@ -1,0 +1,93 @@
+name: Device report (it does not start, crashes, or draws wrong)
+description: A device the Android build fails on. The log is in Downloads after a failed start - please attach it.
+title: "[device] <phone/tablet model>: <what happens>"
+labels: ["android", "device report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing. Almost all of this is decided by one block of the log, so the two fields below matter
+        more than everything else.
+
+        **Where the log is:** if the game did not start, launch it once more. It writes
+        `Downloads/Peggle2-logs-<model>-<date>.zip` and then shows a dialog saying so. Attach that zip to this
+        report (drag it into the box below).
+
+        If the app never shows anything at all and no zip appears in Downloads, say so in the "notes" field - that
+        is a different bug and still useful to know.
+
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: What happens
+      options:
+        - Black screen at launch, then it hangs
+        - Black screen at launch, then it closes
+        - It starts but a level crashes
+        - Graphics are wrong (missing/black textures, geometry)
+        - Sound or controls
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device model
+      description: Settings → About phone → Device name / Model. Include the chip if you know it.
+      placeholder: Amazon Fire Max 11 (Mali-G57 MC2)
+    validations:
+      required: true
+
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+      placeholder: "11 (Fire OS 8)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: gpu
+    attributes:
+      label: The [android] lines from the log
+      description: |
+        In the zip, open `logs/plume_stderr.log` and copy the three lines that start with `[android]` (the GPU's
+        name, its limits, and the descriptor-indexing features). These say what the driver allows, which is what
+        decides the fix.
+      render: text
+      placeholder: |
+        [android] Mali-G57 MC2, API 1.1.131, driver 0x6800000
+        [android] VK_EXT_descriptor_indexing listed 1; features: ...
+        [android] limits: perStage sampledImages ... boundSets 4; ...
+    validations:
+      required: false
+
+  - type: input
+    id: build
+    attributes:
+      label: Which build
+      description: The release you downloaded, or "built from source" with the commit.
+      placeholder: "built from source, main @ 353821c"
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: |
+        Anything else: whether it worked on another device, whether `renut_packed_draw_sets = false` in
+        `peggle2.toml` changes anything, whether the intro video plays, etc.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: attached
+    attributes:
+      label: Before posting
+      options:
+        - label: I attached the `Peggle2-logs-*.zip` from Downloads (or explained why there is none)
+          required: true
+        - label: I am not asking for game files - the log and the device report are all I am sending
+          required: true

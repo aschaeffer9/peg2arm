@@ -10,6 +10,7 @@
  */
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <map>
 #include <memory>
@@ -92,6 +93,9 @@ bool InitializeAndroidProcess() {
 [[noreturn]] void AndroidExitToLauncher() {
   REXLOG_INFO("peggle2-android: the game ended; finishing the activity and the process");
   rex::FlushLogging();
+  // peggle2-android (2026-11): this run ended normally, so the next start has nothing to report (Diagnostics.java
+  // writes the marker and exports the logs of a run that did not get here).
+  std::remove("logs/session.lock");
   JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
   jobject activity = static_cast<jobject>(SDL_GetAndroidActivity());
   if (env && activity) {

@@ -325,6 +325,10 @@ struct Bound {
   // banjo-nx: the uniform buffer sets 5-7 last bound (Vulkan), and their offsets.
   const plume::RenderDescriptorSet *constant_sets[3] = {};
   uint32_t constant_offsets[3] = {};
+  // peggle2-android: the packed layout's set 2 last bound (the three constant blocks as three bindings of one set)
+  // and its three offsets.
+  const plume::RenderDescriptorSet *packed_constants_set = nullptr;
+  uint32_t packed_constants_offsets[3] = {};
 };
 Bound g_bound;
 
@@ -339,6 +343,53 @@ void BindConstantSet(plume::RenderCommandList *cmd, uint32_t set_index, plume::R
   cmd->setGraphicsDescriptorSetDynamic(set, set_index, &offset32, 1);
   g_bound.constant_sets[slot] = set;
   g_bound.constant_offsets[slot] = offset32;
+}
+
+// peggle2-android (2026-11, the packed draw layout): set 2, the vertex shader's float constants, the pixel shader's
+// and SharedConstants as bindings 0, 1 and 2 of one descriptor set, each a dynamic uniform buffer offset.
+//
+// The three are separate uploads (UploadFloatConstants twice and the shared block's), so they can land in different
+// chunks of the ring, and a chunk's set can only address that chunk's buffer. Then the three blocks are copied into
+// one fresh allocation, which is one chunk by construction: ~9.6 KB, on a path a 32 MB chunk a frame makes rare.
+bool BindPackedConstants(plume::RenderCommandList *cmd, const UploadAllocation &vs, const UploadAllocation &ps,
+                         const UploadAllocation &sc) {
+  plume::RenderDescriptorSet *set = vs.constants_set;
+  uint32_t offsets[3];
+  if (vs.chunk_buffer && vs.chunk_buffer == ps.chunk_buffer && vs.chunk_buffer == sc.chunk_buffer) {
+    offsets[0] = uint32_t(vs.ref.offset);
+    offsets[1] = uint32_t(ps.ref.offset);
+    offsets[2] = uint32_t(sc.ref.offset);
+  } else {
+    static bool logged = false;
+    if (!logged) {
+      logged = true;
+      RGPU_INFO("Constant blocks landed in different upload chunks; copying them into one (rare)");
+    }
+    const UploadAllocation combined = Video::UploadsLocked().Allocate(kPackedConstantsBytes, 256);
+    if (!combined) {
+      RGPU_ERROR("Constant blocks: combined upload failed");
+      return false;
+    }
+    auto *dst = static_cast<uint8_t *>(combined.cpu);
+    std::memcpy(dst, vs.cpu, kFloatConstantsUboBytes);
+    std::memcpy(dst + kPackedConstantSlot, ps.cpu, kFloatConstantsUboBytes);
+    std::memcpy(dst + kPackedConstantSlot * 2, sc.cpu, std::min<size_t>(sc.size, kSharedConstantsUboBytes));
+    set = combined.constants_set;
+    offsets[0] = 0;
+    offsets[1] = kPackedConstantSlot;
+    offsets[2] = kPackedConstantSlot * 2;
+    if (!set) {
+      RGPU_ERROR("Constant blocks: combined upload has no descriptor set");
+      return false;
+    }
+  }
+  if (g_bound.packed_constants_set == set &&
+      std::memcmp(g_bound.packed_constants_offsets, offsets, sizeof(offsets)) == 0)
+    return true;
+  cmd->setGraphicsDescriptorSetDynamic(set, kPackedConstantsSet, offsets, 3);
+  g_bound.packed_constants_set = set;
+  std::memcpy(g_bound.packed_constants_offsets, offsets, sizeof(offsets));
+  return true;
 }
 
 // The last declaration a draw looked up by VA (otherwise a registry lookup
@@ -4707,18 +4758,19 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
   if (!g_bound.layout) {
     cmd->setGraphicsPipelineLayout(s.draw_layout.get());
     cmd->setGraphicsDescriptorSet(s.texture_set.get(), 0);
-#if RENUT_PACKED_DRAW_SETS  // peggle2-android
-    cmd->setGraphicsDescriptorSet(s.sampler_set.get(), kDrawSamplerSet);
-#else
-    cmd->setGraphicsDescriptorSet(s.texture_set.get(), 1);
-    cmd->setGraphicsDescriptorSet(s.texture_set.get(), 2);
-    cmd->setGraphicsDescriptorSet(s.sampler_set.get(), 3);
-    cmd->setGraphicsDescriptorSet(s.texture_set.get(), 4);
-#endif
+    if (PackedDrawSets()) {  // peggle2-android: set 1 is the samplers; the table is bound once, at set 0
+      cmd->setGraphicsDescriptorSet(s.sampler_set.get(), kPackedSamplerSet);
+    } else {
+      cmd->setGraphicsDescriptorSet(s.texture_set.get(), 1);
+      cmd->setGraphicsDescriptorSet(s.texture_set.get(), 2);
+      cmd->setGraphicsDescriptorSet(s.sampler_set.get(), 3);
+      cmd->setGraphicsDescriptorSet(s.texture_set.get(), 4);
+    }
     g_bound.layout = true;
     g_bound.pipeline = nullptr;
     std::fill(std::begin(g_bound.root_set), std::end(g_bound.root_set), false);
     std::fill(std::begin(g_bound.constant_sets), std::end(g_bound.constant_sets), nullptr);
+    g_bound.packed_constants_set = nullptr;  // the new layout's set 2 is not bound
   }
   if (g_bound.pipeline != pipeline) {
     // banjo-nx: NVK's prefetch hint (the Switch); the record worker gives it itself, on the core that binds.
@@ -4773,9 +4825,15 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
         g_bound.shared_words_set = false;
       }
 #endif
-      BindConstantSet(cmd, kVertexConstantsSet, vs_alloc.float_constants_set, vs_alloc.ref.offset);
-      BindConstantSet(cmd, kPixelConstantsSet, ps_alloc.float_constants_set, ps_alloc.ref.offset);
-      BindConstantSet(cmd, kSharedConstantsSet, sc_alloc.shared_constants_set, sc_alloc.ref.offset);
+      if (PackedDrawSets()) {
+        // peggle2-android: the three blocks as bindings 0, 1 and 2 of set 2.
+        if (!BindPackedConstants(cmd, vs_alloc, ps_alloc, sc_alloc))
+          return false;
+      } else {
+        BindConstantSet(cmd, kVertexConstantsSet, vs_alloc.float_constants_set, vs_alloc.ref.offset);
+        BindConstantSet(cmd, kPixelConstantsSet, ps_alloc.float_constants_set, ps_alloc.ref.offset);
+        BindConstantSet(cmd, kSharedConstantsSet, sc_alloc.shared_constants_set, sc_alloc.ref.offset);
+      }
     }
   } else {
     SetRootDescriptor(cmd, vs_alloc.ref, kDrawRootVertexConstants);

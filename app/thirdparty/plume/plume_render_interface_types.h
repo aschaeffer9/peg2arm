@@ -1809,6 +1809,11 @@ namespace plume {
 
         // Buffers.
         bool bufferDeviceAddress = false;
+
+        // peggle2-android (2026-11): 64-bit integers in shaders (Renut's buffer addresses), and the per-stage limit of
+        // update-after-bind sampled images (the bindless texture table's binding); 0 where the backend does not report it.
+        bool shaderInt64 = false;
+        uint32_t maxUpdateAfterBindSampledImages = 0;
         
         // Samplers.
         bool samplerMirrorClampToEdge = false;
