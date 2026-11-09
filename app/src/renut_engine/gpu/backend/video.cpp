@@ -954,19 +954,24 @@ bool Video::CreateHostDevice() {
   // texture table is one binding of kTextureDescriptorCount images, which the update-after-bind limit must hold.
   {
     const plume::RenderDeviceCapabilities &caps = s.device->getCapabilities();
-    std::string missing;
+    // Every missing feature is named, not only the first, so one report says all of it.
+    std::vector<std::string> missing;
     if (!caps.bufferDeviceAddress)
-      missing = "buffer device addresses (VK_KHR_buffer_device_address)";
-    else if (!caps.shaderInt64)
-      missing = "64-bit integers in shaders (shaderInt64)";
-    else if (!caps.descriptorIndexing)
-      missing = "bindless textures (VK_EXT_descriptor_indexing)";
+      missing.push_back("buffer device addresses (VK_KHR_buffer_device_address)");
+    if (!caps.shaderInt64)
+      missing.push_back("64-bit integers in shaders (shaderInt64)");
+    if (!caps.descriptorIndexing)
+      missing.push_back("bindless textures (VK_EXT_descriptor_indexing)");
     else if (caps.maxUpdateAfterBindSampledImages && caps.maxUpdateAfterBindSampledImages < kTextureDescriptorCount)
-      missing = fmt::format("{} bindless textures (the GPU allows {})", kTextureDescriptorCount,
-                            caps.maxUpdateAfterBindSampledImages);
+      missing.push_back(fmt::format("{} bindless textures (the GPU allows {})", kTextureDescriptorCount,
+                                    caps.maxUpdateAfterBindSampledImages));
     if (!missing.empty()) {
-      g_startup_error = "This GPU (" + s.device->getDescription().name + ") lacks a Vulkan feature the game needs: " +
-                        missing + ".";
+      std::string list;
+      for (size_t i = 0; i < missing.size(); ++i)
+        list += (i == 0 ? "" : i + 1 == missing.size() ? " and " : ", ") + missing[i];
+      g_startup_error = "This GPU (" + s.device->getDescription().name + ") lacks " +
+                        (missing.size() == 1 ? "a Vulkan feature" : "Vulkan features") + " the game needs: " + list +
+                        ". Its graphics driver is too old for this port.";
       RGPU_ERROR("{}", g_startup_error);
       return false;
     }

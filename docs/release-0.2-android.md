@@ -72,6 +72,10 @@ The file that decides almost everything is the top of `logs/plume_stderr.log`:
 
 - **I cannot test every device.** This release fixes what a Vulkan 1.1 Mali device fails at as far as reading the
   code can show; the next problem will be something else, and the reports are what will find it.
+- **Older Qualcomm drivers are not supported.** The renderer needs bindless textures (descriptor indexing) and 64-bit
+  integers in shaders. A Galaxy S20 (Adreno 650, Vulkan 1.1.128 driver) has neither, and 0.2 says so on screen
+  instead of starting. Loading Mesa's open-source Turnip driver for such phones is being looked at for a later
+  release.
 - **Amazon Fire TV is not supported.** Those devices run 32-bit userland (the APK is arm64-v8a) and have no
   touchscreen; Fire *tablets* (Fire OS 8, Android 11) are what this release targets.
 - **`arm64-v8a`, Vulkan 1.1, Android 11** are the floor. A device below any of them will not run this.
