@@ -17,6 +17,12 @@ on:
 permissions:
   contents: write
 
+# Publishing a release in the web UI creates its tag too, so the tag push and the release event both start a run.
+# One at a time per tag: the second then replaces the APK (--clobber) instead of colliding with the first's upload.
+concurrency:
+  group: launcher-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   launcher:
     runs-on: ubuntu-latest
